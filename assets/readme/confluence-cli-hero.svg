@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 720" role="img" aria-label="Confluence CLI">
+  <rect width="1440" height="720" fill="#fbfaf7"/>
+  <rect x="32" y="32" width="1376" height="656" fill="none" stroke="#161616" stroke-width="4"/>
+  <path d="M140 502L376 234h132L272 502H140Zm244 0L620 234h132L516 502H384Zm244 0L864 234h132L760 502H628Zm244 0L1108 234h132L1004 502H872Z" fill="#161616"/>
+  <text x="140" y="180" fill="#161616" font-family="Inter,Arial,sans-serif" font-size="96" font-weight="800" letter-spacing="-6">Confluence CLI</text>
+  <text x="140" y="258" fill="#606060" font-family="Inter,Arial,sans-serif" font-size="34">install · update · docs · release · tests</text>
+</svg>

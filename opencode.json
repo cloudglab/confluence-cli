@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "release": {
+      "description": "检查 confluence-cli 发版准备情况",
+      "prompt": "请按 confluence-cli 当前仓库的真实发布流程检查发版准备情况。先核对 package.json、CHANGELOG.md、.github/workflows/publish.yml、README.md 里的发布约定；再检查当前版本号、是否存在 release 相关脚本（尤其是 pnpm check、pnpm release:smoke-query）、以及是否缺少关键发布步骤。默认只做检查和建议，不要执行发布，不要打 tag，不要提交代码。优先给出一个简洁 checklist，并指出下一步最合适的命令。"
+    },
+    "smoke": {
+      "description": "检查 CLI 烟测命令和验证入口",
+      "prompt": "请检查 confluence-cli 当前 CLI 的烟测与验证入口。重点查看 package.json、scripts/release-query-smoke.mjs、README.md，以及必要时查看 dist/bin 或 src/cli.ts。先判断应该运行哪些轻量命令（如 pnpm release:smoke-query --dry-run、pnpm typecheck、pnpm build），再说明当前命令面是否覆盖主要内置命令和核心查询命令。默认不要运行真实写操作，也不要要求发布。输出要简短，结尾给出推荐执行顺序。"
+    }
+  }
+}

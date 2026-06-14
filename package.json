@@ -1,0 +1,63 @@
+{
+  "name": "@cloudglab/confluence-cli",
+  "version": "0.1.0",
+  "description": "Confluence REST CLI for agents and local automation",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cloudglab/confluence-cli.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "confluence": "dist/bin/confluence.js",
+    "confluence-cli": "dist/bin/confluence.js",
+    "confluence-reader": "dist/bin/confluence-reader.js",
+    "confluence-writer": "dist/bin/confluence-writer.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "README.md",
+    "CHANGELOG.md",
+    "AGENTS.md",
+    "skills",
+    "docs",
+    "assets"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsx scripts/generate-manifest.ts && tsc -p tsconfig.json && node scripts/fix-bin-mode.mjs",
+    "dev": "tsx src/bin/confluence.ts",
+    "dev:reader": "tsx src/bin/confluence.ts --role reader",
+    "dev:writer": "tsx src/bin/confluence.ts --role writer",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "lint": "oxlint src",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "release:smoke-query": "node scripts/release-query-smoke.mjs",
+    "prepare": "node scripts/prepare.mjs"
+  },
+  "dependencies": {
+    "@mermaid-js/mermaid-cli": "^11.15.0",
+    "@whitebite/diagram-converter": "^0.2.0",
+    "axios": "^1.7.9",
+    "marked": "^18.0.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.8",
+    "@types/node": "^22.10.2",
+    "lefthook": "^2.1.9",
+    "oxlint": "^0.15.15",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

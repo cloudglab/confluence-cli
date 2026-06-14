@@ -1,0 +1,88 @@
+import { EventEmitter } from "node:events";
+import path from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const commandCalls: Array<{ command: string; args: string[] }> = [];
+
+function mockSpawn(stdoutByCommand = new Map<string, string>()) {
+  vi.doMock("node:child_process", () => ({
+    spawn: vi.fn((command: string, args: string[]) => {
+      commandCalls.push({ command, args });
+      const child = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter };
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      (child.stdout as EventEmitter & { pipe: ReturnType<typeof vi.fn> }).pipe = vi.fn();
+
+      queueMicrotask(() => {
+        const key = `${command} ${args.join(" ")}`;
+        const stdout = stdoutByCommand.get(key);
+        if (stdout) child.stdout.emit("data", Buffer.from(stdout));
+        child.emit("close", 0);
+      });
+
+      return child;
+    }),
+  }));
+}
+
+function mockInstallDependencies() {
+  vi.doMock("node:fs/promises", () => ({
+    access: vi.fn(async () => undefined),
+    mkdtemp: vi.fn(async () => "/tmp/confluence-cli-skill-abc"),
+    rm: vi.fn(async () => undefined),
+  }));
+  vi.doMock("node:os", () => ({ default: { tmpdir: () => "/tmp" } }));
+  vi.doMock("../src/api/index.js", () => ({
+    ConfluenceApi: class {
+      getCurrentUser = vi.fn(async () => ({ username: "me" }));
+    },
+  }));
+  vi.doMock("../src/core/config.js", () => ({
+    loadConfluenceConfig: vi.fn(() => ({ url: "https://confluence.example.com", apiBaseUrl: "https://confluence.example.com/rest/api", authType: "pat", personalToken: "secret", source: "~/.confluence/config.json" })),
+    normalizeConfig: vi.fn((config: unknown) => config),
+    saveConfig: vi.fn(),
+  }));
+}
+
+describe("install command", () => {
+  afterEach(() => {
+    commandCalls.length = 0;
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it("默认安装 CLI 并从全局包安装 skill", async () => {
+    mockSpawn(new Map([["npm root -g", "/usr/local/lib/node_modules\n"]]));
+    mockInstallDependencies();
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const { runInstallCommand } = await import("../src/install.js");
+
+    await runInstallCommand(["--skip-config-check"]);
+
+    expect(commandCalls).toEqual([
+      { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
+      { command: "npm", args: ["root", "-g"] },
+      { command: "npx", args: ["-y", "skills", "add", "-g", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli")] },
+    ]);
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("安装完成，已跳过 Confluence 配置校验。"));
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("   ___       ___"));
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("快速开始："));
+  });
+
+  it("支持 npm skill 来源、本地 skill 路径和布尔参数", async () => {
+    mockSpawn(new Map([["npm pack @cloudglab/confluence-cli@latest --pack-destination /tmp/confluence-cli-skill-abc --silent", "cloudglab-confluence-cli-0.1.0.tgz\n"]]));
+    mockInstallDependencies();
+    const { runInstallCommand, runUpdateCommand } = await import("../src/install.js");
+
+    await runInstallCommand(["--skill-source=npm", "--skip-config-check=true"]);
+    await runUpdateCommand(["--skill-local-path", "./local-skill", "--skill-only", "true", "--skip-config-check", "true"]);
+
+    expect(commandCalls).toEqual([
+      { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
+      { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"] },
+      { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
+      { command: "npx", args: ["-y", "skills", "add", "-g", "/tmp/confluence-cli-skill-abc/package"] },
+      { command: "npx", args: ["-y", "skills", "add", "-g", path.resolve("./local-skill")] },
+    ]);
+  });
+});
