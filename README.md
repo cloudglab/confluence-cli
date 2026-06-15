@@ -12,6 +12,12 @@ pnpm build
 pnpm dev help
 ```
 
+> 0.1.0、0.1.1 已被 `npm deprecate` 标记弃用，因为发布的 `SKILL.md` 缺少 `npx skills` 要求的 YAML frontmatter，导致 `confluence install` / `update` 装不上 skill。**请安装 0.1.2 及以上**：
+> ```bash
+> npm install -g @cloudglab/confluence-cli@0.1.2
+> confluence install
+> ```
+
 常用工程命令：
 
 ```bash

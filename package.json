@@ -1,6 +1,6 @@
 {
   "name": "@cloudglab/confluence-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Confluence REST CLI for agents and local automation",
   "repository": {
     "type": "git",

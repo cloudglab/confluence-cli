@@ -50,15 +50,4 @@ jobs:
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euxo pipefail
-          echo "--- npmrc ---"
-          cat ~/.npmrc 2>/dev/null || echo "(no .npmrc)"
-          echo "--- npm whoami ---"
-          npm whoami || true
-          echo "--- token len ---"
-          if [ -n "$NODE_AUTH_TOKEN" ]; then echo "NODE_AUTH_TOKEN length=${#NODE_AUTH_TOKEN}"; else echo "NODE_AUTH_TOKEN is empty"; fi
-          echo "--- publish dry run ---"
-          npm publish --provenance --access public --dry-run
-          echo "--- actual publish ---"
-          npm publish --provenance --access public
+        run: npm publish --provenance --access public

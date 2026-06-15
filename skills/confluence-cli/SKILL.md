@@ -1,3 +1,8 @@
+---
+name: confluence-cli
+description: Use this CLI for Confluence REST operations from a terminal or agent workflow. Triggers on Confluence page search, read, upload (Markdown/HTML with Mermaid + TOC), download, labels, attachments, comments, and Confluence 7.13.7 REST pass-through.
+---
+
 # Confluence CLI Skill
 
 Use this CLI when a task needs Confluence REST operations from a terminal or agent workflow.

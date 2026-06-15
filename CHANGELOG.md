@@ -11,6 +11,17 @@ All notable changes to this project will be documented in this file.
 - Skill 与 README 记录完整页面发布默认携带 `--toc` 的标准流程。
 - 工程化补齐 Vitest、release smoke、bin 权限修复、lefthook、GitHub Pages、npm publish、安装/更新命令、更新探针、角色 bin、静态文档页和 README 封面资产。
 
+## 0.1.2 - 2026-06-15
+
+### Fixed
+
+- 修复 `npx -y skills add` 安装失败：发布出去的 `skills/confluence-cli/SKILL.md` 缺少 `npx skills` 要求的 YAML frontmatter（`name` + `description`），导致 `confluence install` / `confluence update` 永远停在 `No valid skills found. Skills require a SKILL.md with name and description.`。补上 frontmatter 后 `npx -y skills add <source> --yes` 安装成功。
+
+### Notes
+
+- 0.1.0、0.1.1 已被 `npm deprecate` 标弃用，请升级到 0.1.2 及以上。
+- 发布前本地已真实调用 `npx -y skills add <source> --yes` 验证通过，避免再发生“CI 通过、用户安装失败”的盲点。
+
 ## 0.1.1 - 2026-06-15
 
 ### Changed
