@@ -8,10 +8,10 @@ vi.mock("node:fs/promises", async () => {
     readFile: vi.fn(async (file) => {
       const fileName = String(file);
       if (fileName.includes("CHANGELOG.md")) {
-        return "# Changelog\n\n## 0.1.0 - 2026-06-12\n\n- 初始版本\n";
+        return "# Changelog\n\n## 0.0.1 - 2026-06-15\n\n- 初始版本\n";
       }
       return JSON.stringify({
-        version: "0.1.0",
+        version: "0.0.1",
         commands: [
           "initConfluence",
           "searchContent",
@@ -56,7 +56,7 @@ describe("runCli", () => {
     await runCli(["help"]);
 
     const output = String(write.mock.calls.at(-1)?.[0] ?? "");
-    expect(output).toContain("confluence CLI 0.1.2");
+    expect(output).toContain("confluence CLI 0.0.1");
     expect(output).toContain("confluence [--role full|reader|writer] <command> [--key value]");
     expect(output).toContain("写操作保护");
   });
@@ -109,7 +109,7 @@ describe("runCli", () => {
 
     const output = String(write.mock.calls.at(-1)?.[0] ?? "");
     expect(output).toContain("confluence CLI 最近更新");
-    expect(output).toContain("## 0.1.0 - 2026-06-12");
+    expect(output).toContain("## 0.0.1 - 2026-06-15");
   });
 
   it("prints builtin changelog help", async () => {

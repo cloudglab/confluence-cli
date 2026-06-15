@@ -47,7 +47,7 @@ describe("runDailyUpdateProbe", () => {
     vi.doMock("node:os", () => ({ homedir: () => "/tmp/home" }));
     vi.doMock("node:fs/promises", () => ({
       mkdir: vi.fn(async () => undefined),
-      readFile: vi.fn(async () => JSON.stringify({ lastCheckedDate: "2026-06-14", latestVersion: "0.1.20", currentVersion: "0.1.2" })),
+      readFile: vi.fn(async () => JSON.stringify({ lastCheckedDate: "2026-06-14", latestVersion: "0.1.20", currentVersion: "0.0.1" })),
       writeFile: writeFileMock,
     }));
     const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
@@ -55,7 +55,7 @@ describe("runDailyUpdateProbe", () => {
 
     await runDailyUpdateProbe("searchContent");
 
-    expect(write).toHaveBeenCalledWith(expect.stringContaining("检测到 Confluence CLI 新版本 0.1.20（当前 0.1.2）。"));
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("检测到 Confluence CLI 新版本 0.1.20（当前 0.0.1）。"));
     expect(write).toHaveBeenCalledWith(expect.stringContaining("confluence update --skip-config-check"));
   });
 
