@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { homedir } from "node:os";
 
 const commandCalls: Array<{ command: string; args: string[] }> = [];
 
@@ -31,7 +32,7 @@ function mockInstallDependencies() {
     mkdtemp: vi.fn(async () => "/tmp/confluence-cli-skill-abc"),
     rm: vi.fn(async () => undefined),
   }));
-  vi.doMock("node:os", () => ({ default: { tmpdir: () => "/tmp" } }));
+  vi.doMock("node:os", () => ({ default: { tmpdir: () => "/tmp", homedir: () => homedir() } }));
   vi.doMock("../src/api/index.js", () => ({
     ConfluenceApi: class {
       getCurrentUser = vi.fn(async () => ({ username: "me" }));
@@ -41,6 +42,9 @@ function mockInstallDependencies() {
     loadConfluenceConfig: vi.fn(() => ({ url: "https://confluence.example.com", apiBaseUrl: "https://confluence.example.com/rest/api", authType: "pat", personalToken: "secret", source: "~/.confluence/config.json" })),
     normalizeConfig: vi.fn((config: unknown) => config),
     saveConfig: vi.fn(),
+  }));
+  vi.doMock("../src/update-probe.js", () => ({
+    writeUpdateCacheAfterInstall: vi.fn(async () => undefined),
   }));
 }
 
@@ -60,9 +64,10 @@ describe("install command", () => {
     await runInstallCommand(["--skip-config-check"]);
 
     expect(commandCalls).toEqual([
+      { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
       { command: "npm", args: ["root", "-g"] },
-      { command: "npx", args: ["-y", "skills", "add", "-g", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli")] },
+      { command: "npx", args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--yes"] },
     ]);
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("安装完成，已跳过 Confluence 配置校验。"));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("   ___       ___"));
@@ -78,11 +83,25 @@ describe("install command", () => {
     await runUpdateCommand(["--skill-local-path", "./local-skill", "--skill-only", "true", "--skip-config-check", "true"]);
 
     expect(commandCalls).toEqual([
+      { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
       { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"] },
       { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
-      { command: "npx", args: ["-y", "skills", "add", "-g", "/tmp/confluence-cli-skill-abc/package"] },
-      { command: "npx", args: ["-y", "skills", "add", "-g", path.resolve("./local-skill")] },
+      { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--yes"] },
+      { command: "npx", args: ["-y", "skills", "add", path.resolve("./local-skill"), "--yes"] },
     ]);
+  });
+
+  it("未确认时展示卸载预览", async () => {
+    mockSpawn();
+    mockInstallDependencies();
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const { runUninstallCommand } = await import("../src/install.js");
+
+    await runUninstallCommand([]);
+
+    expect(commandCalls).toEqual([]);
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("卸载预览："));
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("confluence uninstall --confirm true"));
   });
 });

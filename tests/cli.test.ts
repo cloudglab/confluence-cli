@@ -19,13 +19,15 @@ vi.mock("node:fs/promises", async () => {
           "uploadMarkdown",
           "downloadPage",
           "install",
-          "update"
+          "update",
+          "uninstall",
+          "remove"
         ],
         groups: {
           init: ["initConfluence"],
           content: ["searchContent", "getContent"],
           transfer: ["uploadMarkdown", "downloadPage"],
-          install: ["install", "update"]
+          install: ["install", "update", "uninstall", "remove"]
         },
         commandToGroup: {
           initConfluence: "init",
@@ -34,7 +36,9 @@ vi.mock("node:fs/promises", async () => {
           uploadMarkdown: "transfer",
           downloadPage: "transfer",
           install: "install",
-          update: "install"
+          update: "install",
+          uninstall: "install",
+          remove: "install"
         }
       });
     }),
@@ -52,7 +56,7 @@ describe("runCli", () => {
     await runCli(["help"]);
 
     const output = String(write.mock.calls.at(-1)?.[0] ?? "");
-    expect(output).toContain("confluence CLI 0.1.0");
+    expect(output).toContain("confluence CLI 0.1.1");
     expect(output).toContain("confluence [--role full|reader|writer] <command> [--key value]");
     expect(output).toContain("写操作保护");
   });
@@ -62,8 +66,8 @@ describe("runCli", () => {
 
     await runCli(["help", "update"]);
 
-    expect(write).toHaveBeenCalledWith(expect.stringContaining("confluence update [--key value]"));
-    expect(write).toHaveBeenCalledWith(expect.stringContaining("--skip-config-check boolean"));
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("confluence update"));
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("npx -y @cloudglab/confluence-cli@latest update"));
   });
 
   it("supports direct command help flag without validating args", async () => {
@@ -114,6 +118,50 @@ describe("runCli", () => {
     await runCli(["changelog", "--help"]);
 
     expect(write).toHaveBeenCalledWith(expect.stringContaining("confluence changelog [--limit N|all]"));
+  });
+
+  it("prints builtin install help", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runCli(["install", "--help"]);
+
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("confluence install"));
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("npx -y @cloudglab/confluence-cli@latest install"));
+  });
+
+  it("prints builtin update help", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runCli(["update", "--help"]);
+
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("confluence update"));
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("npx -y @cloudglab/confluence-cli@latest update"));
+  });
+
+  it("prints builtin upgrade help", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runCli(["upgrade", "--help"]);
+
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("confluence update"));
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("npx -y @cloudglab/confluence-cli@latest update"));
+  });
+
+  it("prints builtin uninstall help", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runCli(["uninstall", "--help"]);
+
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("confluence uninstall"));
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("npx -y @cloudglab/confluence-cli@latest uninstall --confirm true"));
+  });
+
+  it("prints builtin remove help", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runCli(["remove", "--help"]);
+
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("confluence uninstall"));
   });
 
   it("supports help lookup with targeted registry build", async () => {

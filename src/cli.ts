@@ -9,6 +9,7 @@ import {
   type ChangelogOptions,
 } from "./core/cli-output.js";
 import { buildRegistryForCommand, getAvailableCommandNames } from "./core/manifest.js";
+import { runInstallCommand, runUninstallCommand, runUpdateCommand } from "./install.js";
 import { runDailyUpdateProbe } from "./update-probe.js";
 import { VERSION } from "./version.js";
 import type { Role } from "./types/common.js";
@@ -16,7 +17,7 @@ import type { Role } from "./types/common.js";
 export async function runCli(argv: string[]): Promise<void> {
   const { command, commandArgs, role } = parseCli(argv);
   const registeredCommandNames = await getAvailableCommandNames(role);
-  const commandNames = [...BUILTIN_COMMAND_NAMES, ...registeredCommandNames]
+  const commandNames = [...new Set([...BUILTIN_COMMAND_NAMES, ...registeredCommandNames])]
     .sort((left, right) => left.localeCompare(right));
 
   await runDailyUpdateProbe(command);
@@ -68,6 +69,21 @@ export async function runCli(argv: string[]): Promise<void> {
   if (command === "changelog") {
     const options = parseChangelogOptions(commandArgs);
     process.stdout.write(`${await renderChangelog(options)}\n`);
+    return;
+  }
+
+  if (command === "install") {
+    await runInstallCommand(commandArgs);
+    return;
+  }
+
+  if (command === "update" || command === "upgrade") {
+    await runUpdateCommand(commandArgs);
+    return;
+  }
+
+  if (command === "uninstall" || command === "remove") {
+    await runUninstallCommand(commandArgs);
     return;
   }
 

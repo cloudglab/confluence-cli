@@ -26,8 +26,19 @@ pnpm release:smoke-query --dry-run
 ```bash
 confluence install --skip-config-check true
 confluence update --skip-config-check true
+npx -y @cloudglab/confluence-cli@latest install
+npx -y @cloudglab/confluence-cli@latest update
 confluence-reader list
 confluence-writer list
+```
+
+卸载入口（默认仅打印卸载计划，真实执行需显式确认）：
+
+```bash
+confluence uninstall
+confluence uninstall --confirm true
+confluence uninstall --confirm true --keep-config true
+npx -y @cloudglab/confluence-cli@latest uninstall --confirm true
 ```
 
 本地命令速查页：`docs/index.html`。
@@ -125,3 +136,12 @@ CONFLUENCE_SKIP_UPDATE_CHECK=true
 - 页面下载为带 frontmatter 的 Markdown，并可下载附件和一层子页
 - 工程化脚本：Vitest 单元测试、发布前查询 smoke、bin 权限修复、CHANGELOG 和 lefthook 检查入口
 - 安装/更新命令、每日更新探针、角色 bin 入口、静态命令速查页和 README 封面资产
+
+## 项目级 OpenCode 命令
+
+`.opencode/opencode.json` 提供了两个项目级 OpenCode 命令：
+
+- `release`：复刻 zentao-cli 的 `/release` 流程，按 12 步固定顺序准备发布；默认手动发包，**未经再次授权不会执行 `npm publish`、`git push`、打 tag 或创建 GitHub Release**。
+- `smoke`：检查当前 CLI 的烟测与验证入口（`pnpm release:smoke-query --dry-run`、`pnpm typecheck`、`pnpm build` 等）。
+
+修改 `.opencode/opencode.json` 后，需要退出并重启 OpenCode 才能生效。

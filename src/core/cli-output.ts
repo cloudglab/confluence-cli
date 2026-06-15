@@ -9,6 +9,11 @@ const BUILTIN_DESCRIPTIONS: Record<string, string> = {
   list: "按场景列出可用命令",
   version: "查看 CLI 版本",
   changelog: "查看版本更新记录",
+  install: "安装 CLI 和 Confluence skill",
+  update: "更新 CLI 和 Confluence skill",
+  upgrade: "update 的别名",
+  uninstall: "卸载 CLI / skill / 配置",
+  remove: "uninstall 的别名",
 };
 
 const COMMAND_DESCRIPTIONS: Record<string, string> = {
@@ -38,6 +43,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
 };
 
 export const BUILTIN_COMMAND_NAMES = ["changelog", "help", "list", "version"];
+export const BUILTIN_COMMAND_ALIASES = ["install", "update", "upgrade", "uninstall", "remove"];
 
 export function printHelp(role: Role, commandNames: string[]): void {
   const recommended = getRecommendedCommands(commandNames);
@@ -60,6 +66,11 @@ export function printHelp(role: Role, commandNames: string[]): void {
     "  confluence version              查看版本",
     "  confluence changelog            查看最近更新",
     "",
+    "安装/更新：",
+    "  confluence install              一键安装 CLI + Skill",
+    "  confluence update               更新到最新版本",
+    "  npx -y @cloudglab/confluence-cli@latest install",
+    "",
     "常用命令：",
     ...recommended.map((item) => `  - ${item.name.padEnd(28)} ${item.description}`),
     "",
@@ -76,7 +87,7 @@ export function printHelp(role: Role, commandNames: string[]): void {
 }
 
 export function printCommandList(role: Role, commandNames: string[], builtinCommandNames = BUILTIN_COMMAND_NAMES): void {
-  const allCommandNames = [...builtinCommandNames, ...commandNames]
+  const allCommandNames = [...new Set([...builtinCommandNames, ...commandNames])]
     .sort((left, right) => left.localeCompare(right));
   const groups = buildCommandGroups(allCommandNames);
 
@@ -110,6 +121,12 @@ export function printCommandList(role: Role, commandNames: string[], builtinComm
 }
 
 export function getBuiltinCommandHelp(commandName: string): string | undefined {
+  const normalizedCommand = commandName === "upgrade"
+    ? "update"
+    : commandName === "remove"
+      ? "uninstall"
+      : commandName;
+
   const help: Record<string, string> = {
     help: [
       "confluence help [command]",
@@ -123,6 +140,56 @@ export function getBuiltinCommandHelp(commandName: string): string | undefined {
       "",
       "参数：",
       "  --raw  仅输出命令名，每行一个，适合脚本处理",
+    ].join("\n"),
+    install: [
+      "confluence install",
+      "",
+      "用法：",
+      "  confluence install [--skill-source local|git|npm] [--skill-local-path <path>] [--skip-config-check] [--cli-only] [--skill-only]",
+      "  npx -y @cloudglab/confluence-cli@latest install",
+      "",
+      "说明：",
+      "  安装或更新 CLI，并按来源安装 Confluence skill。",
+      "",
+      "参数：",
+      "  --skill-source <local|git|npm> （可选）：skill 安装来源，默认 local。",
+      "  --skill-local-path <string> （可选）：直接从本地目录安装 skill。",
+      "  --skip-config-check （可选）：安装后跳过 Confluence 配置校验。",
+      "  --cli-only （可选）：只安装 CLI，不安装 skill。",
+      "  --skill-only （可选）：只安装 skill，不安装 CLI。",
+    ].join("\n"),
+    update: [
+      "confluence update",
+      "",
+      "用法：",
+      "  confluence update [--skill-source local|git|npm] [--skill-local-path <path>] [--skip-config-check] [--cli-only] [--skill-only]",
+      "  npx -y @cloudglab/confluence-cli@latest update",
+      "",
+      "说明：",
+      "  更新或重新安装 CLI，并按来源更新 Confluence skill。",
+      "",
+      "参数：",
+      "  --skill-source <local|git|npm> （可选）：skill 更新来源，默认 local。",
+      "  --skill-local-path <string> （可选）：直接从本地目录更新 skill。",
+      "  --skip-config-check （可选）：更新后跳过 Confluence 配置校验。",
+      "  --cli-only （可选）：只更新 CLI，不更新 skill。",
+      "  --skill-only （可选）：只更新 skill，不更新 CLI。",
+    ].join("\n"),
+    uninstall: [
+      "confluence uninstall",
+      "",
+      "用法：",
+      "  confluence uninstall [--confirm true] [--keep-config true] [--cli-only] [--skill-only]",
+      "  npx -y @cloudglab/confluence-cli@latest uninstall --confirm true",
+      "",
+      "说明：",
+      "  卸载 CLI、Confluence skill，以及可选的本地配置文件。",
+      "",
+      "参数：",
+      "  --confirm （可选）：显式确认后才真实执行卸载。",
+      "  --keep-config （可选）：保留 ~/.confluence/config.json。",
+      "  --cli-only （可选）：只卸载 CLI，不卸载 skill。",
+      "  --skill-only （可选）：只卸载 skill，不卸载 CLI。",
     ].join("\n"),
     version: [
       "confluence version",
@@ -142,7 +209,7 @@ export function getBuiltinCommandHelp(commandName: string): string | undefined {
     ].join("\n"),
   };
 
-  return help[commandName];
+  return help[normalizedCommand];
 }
 
 export function printCommandHelp(registry: InMemoryCliRegistry, name: string): void {
@@ -167,7 +234,7 @@ interface CommandListGroup {
 
 function buildCommandGroups(commandNames: string[]): CommandListGroup[] {
   const groups: CommandListGroup[] = [
-    { title: "开始使用", match: (name) => ["changelog", "help", "list", "version", "install", "update", "initConfluence"].includes(name), commands: [] },
+    { title: "开始使用", match: (name) => ["changelog", "help", "list", "version", "install", "update", "upgrade", "uninstall", "remove", "initConfluence"].includes(name), commands: [] },
     { title: "内容检索 / 页面", match: (name) => /Content|Page|searchContent|getContent/.test(name), commands: [] },
     { title: "上传 / 下载 / 附件", match: (name) => /Upload|Download|Attachment|upload|download/.test(name), commands: [] },
     { title: "空间 / 标签", match: (name) => /Space|Label/.test(name), commands: [] },

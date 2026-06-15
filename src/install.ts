@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ConfluenceApi } from "./api/index.js";
 import { loadConfluenceConfig, normalizeConfig, saveConfig } from "./core/config.js";
+import { writeUpdateCacheAfterInstall } from "./update-probe.js";
 
 const PACKAGE_NAME = "@cloudglab/confluence-cli";
 const GIT_SKILL_SOURCE = "cloudglab/confluence-cli";
@@ -14,6 +15,13 @@ interface InstallOptions {
   skillSource: SkillSource;
   skillLocalPath?: string;
   skipConfigCheck: boolean;
+  cliOnly: boolean;
+  skillOnly: boolean;
+}
+
+interface UninstallOptions {
+  confirm: boolean;
+  keepConfig: boolean;
   cliOnly: boolean;
   skillOnly: boolean;
 }
@@ -38,6 +46,26 @@ export async function runUpdateCommand(args: string[] = []): Promise<void> {
   }
   await ensureValidConfluenceConfig();
   printSuccessGuide("更新", "Confluence 配置校验通过。");
+}
+
+export async function runUninstallCommand(args: string[] = []): Promise<void> {
+  const options = parseUninstallOptions(args);
+  if (!options.confirm) {
+    printUninstallPreview(options);
+    return;
+  }
+
+  if (!options.cliOnly) {
+    await uninstallSkill();
+  }
+  if (!options.skillOnly) {
+    await uninstallPackage();
+  }
+  if (shouldRemoveConfig(options)) {
+    await removeConfigFile();
+  }
+
+  process.stdout.write("\n卸载完成。\n");
 }
 
 function printSuccessGuide(action: "安装" | "更新", status: string): void {
@@ -68,7 +96,9 @@ function parseInstallOptions(args: string[]): InstallOptions {
     const arg = args[index];
     if (arg === "--skill-source" || arg.startsWith("--skill-source=")) {
       const value = readRequiredOptionValue(args, index, "--skill-source");
-      if (value !== "local" && value !== "git" && value !== "npm") throw new Error("--skill-source 只支持 local、git 或 npm");
+      if (value !== "local" && value !== "git" && value !== "npm") {
+        throw new Error("--skill-source 只支持 local、git 或 npm");
+      }
       skillSource = value;
       if (arg === "--skill-source") index += 1;
       continue;
@@ -104,30 +134,114 @@ function parseInstallOptions(args: string[]): InstallOptions {
     throw new Error(`未知安装参数: ${arg}`);
   }
 
-  if (cliOnly && skillOnly) throw new Error("--cli-only 和 --skill-only 不能同时使用");
+  if (cliOnly && skillOnly) {
+    throw new Error("--cli-only 和 --skill-only 不能同时使用");
+  }
+
   return { skillSource, skillLocalPath, skipConfigCheck, cliOnly, skillOnly };
 }
 
-function readRequiredOptionValue(args: string[], index: number, optionName: string): string {
-  const arg = args[index];
-  const inlineValue = readInlineOptionValue(arg, optionName);
-  if (inlineValue !== undefined) {
-    if (inlineValue.trim() === "") throw new Error(`${optionName} 需要传入参数值`);
-    return inlineValue;
+function parseUninstallOptions(args: string[]): UninstallOptions {
+  let confirm = false;
+  let keepConfig = false;
+  let cliOnly = false;
+  let skillOnly = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--confirm" || arg.startsWith("--confirm=")) {
+      const parsed = readBooleanFlag(args, index, "--confirm");
+      confirm = parsed.value;
+      index += parsed.consumedArgs;
+      continue;
+    }
+
+    if (arg === "--keep-config" || arg.startsWith("--keep-config=")) {
+      const parsed = readBooleanFlag(args, index, "--keep-config");
+      keepConfig = parsed.value;
+      index += parsed.consumedArgs;
+      continue;
+    }
+
+    if (arg === "--cli-only" || arg.startsWith("--cli-only=")) {
+      const parsed = readBooleanFlag(args, index, "--cli-only");
+      cliOnly = parsed.value;
+      index += parsed.consumedArgs;
+      continue;
+    }
+
+    if (arg === "--skill-only" || arg.startsWith("--skill-only=")) {
+      const parsed = readBooleanFlag(args, index, "--skill-only");
+      skillOnly = parsed.value;
+      index += parsed.consumedArgs;
+      continue;
+    }
+
+    throw new Error(`未知卸载参数: ${arg}`);
   }
 
-  const next = args[index + 1];
-  if (typeof next !== "string" || next.startsWith("--")) throw new Error(`${optionName} 需要传入参数值`);
-  return next;
+  if (cliOnly && skillOnly) {
+    throw new Error("--cli-only 和 --skill-only 不能同时使用");
+  }
+
+  return { confirm, keepConfig, cliOnly, skillOnly };
 }
 
-function readInlineOptionValue(arg: string, optionName: string): string | undefined {
+function printUninstallPreview(options: UninstallOptions): void {
+  const steps = [
+    ...(!options.cliOnly ? ["卸载 confluence skill（项目级和全局级）"] : []),
+    ...(!options.skillOnly ? ["卸载全局 CLI 包并清理 npm 残留目录"] : []),
+    ...(shouldRemoveConfig(options) ? ["删除 ~/.confluence/config.json"] : ["保留 ~/.confluence/config.json"]),
+  ];
+
+  process.stdout.write(`卸载预览：\n${steps.map((step) => `  - ${step}`).join("\n")}\n\n真实执行请运行：\n  confluence uninstall --confirm true\n  npx -y ${PACKAGE_NAME}@latest uninstall --confirm true\n\n可选参数：\n  --keep-config true   保留 Confluence 配置\n  --cli-only true      只卸载 CLI\n  --skill-only true    只卸载 skill\n`);
+}
+
+function shouldRemoveConfig(options: UninstallOptions): boolean {
+  return !options.keepConfig && !options.cliOnly && !options.skillOnly;
+}
+
+function createSkillAddArgs(source: string): string[] {
+  return ["-y", "skills", "add", source, "--yes"];
+}
+
+function createSkillRemoveArgs(global = false): string[] {
+  return ["-y", "skills", "remove", "confluence-cli", "--yes", ...(global ? ["--global"] : [])];
+}
+
+function readOptionValue(arg: string, optionName: string): string | undefined {
   const prefix = `${optionName}=`;
   return arg.startsWith(prefix) ? arg.slice(prefix.length) : undefined;
 }
 
+function readRequiredOptionValue(args: string[], index: number, optionName: string): string {
+  const arg = args[index];
+  const inlineValue = readOptionValue(arg, optionName);
+  if (inlineValue !== undefined) {
+    if (inlineValue.trim() === "") {
+      throw createMissingOptionValueError(optionName);
+    }
+    return inlineValue;
+  }
+
+  const next = args[index + 1];
+  if (typeof next !== "string" || next.startsWith("--")) {
+    throw createMissingOptionValueError(optionName);
+  }
+
+  return next;
+}
+
+function createMissingOptionValueError(optionName: string): Error {
+  if (optionName === "--skill-local-path") {
+    return new Error("--skill-local-path 需要传入本地目录路径");
+  }
+
+  return new Error(`${optionName} 需要传入参数值`);
+}
+
 function readBooleanFlag(args: string[], index: number, optionName: string): { value: boolean; consumedArgs: number } {
-  const inlineValue = readInlineOptionValue(args[index], optionName);
+  const inlineValue = readOptionValue(args[index], optionName);
   if (inlineValue !== undefined) return { value: parseBooleanValue(inlineValue, optionName), consumedArgs: 0 };
 
   const next = args[index + 1];
@@ -147,16 +261,50 @@ function parseBooleanValue(value: string, optionName: string): boolean {
 
 async function installPackageAndSkill(action: "安装" | "更新", options: InstallOptions): Promise<void> {
   if (!options.skillOnly) {
-    await runStep(`${action} Confluence CLI`, "npm", ["install", "-g", `${PACKAGE_NAME}@latest`]);
+    await cleanupGlobalPackageResidues();
+    await installGlobalCli(action);
   }
   if (!options.cliOnly) {
     await installSkill(action, options);
+  }
+  await writeUpdateCacheAfterInstall();
+}
+
+async function installGlobalCli(action: "安装" | "更新"): Promise<void> {
+  const args = ["install", "-g", `${PACKAGE_NAME}@latest`];
+  try {
+    await runStep(`${action} Confluence CLI`, "npm", args);
+  } catch (error) {
+    if (!isNpmDirectoryNotEmptyError(error)) {
+      throw error;
+    }
+    process.stdout.write("\n检测到 npm 全局安装目录残留，正在清理后重试...\n");
+    await cleanupGlobalPackageResidues();
+    await runStep(`${action} Confluence CLI`, "npm", args);
+  }
+}
+
+function isNpmDirectoryNotEmptyError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("ENOTEMPTY") || message.toLowerCase().includes("directory not empty");
+}
+
+async function runNpxStepWithRetry(title: string, args: string[]): Promise<void> {
+  try {
+    await runStep(title, "npx", args);
+  } catch (error) {
+    if (!isNpmDirectoryNotEmptyError(error)) {
+      throw error;
+    }
+    process.stdout.write(`\n检测到 npx 缓存目录残留，正在清理后重试 ${title}...\n`);
+    await cleanupNpxResidues();
+    await runStep(title, "npx", args);
   }
 }
 
 async function installSkill(action: "安装" | "更新", options: InstallOptions): Promise<void> {
   if (options.skillLocalPath) {
-    await runStep(`${action} Confluence skill`, "npx", ["-y", "skills", "add", "-g", path.resolve(options.skillLocalPath)]);
+    await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(path.resolve(options.skillLocalPath)));
     return;
   }
 
@@ -166,7 +314,7 @@ async function installSkill(action: "安装" | "更新", options: InstallOptions
   }
 
   if (options.skillSource === "git") {
-    await runStep(`${action} Confluence skill`, "npx", ["-y", "skills", "add", "-g", GIT_SKILL_SOURCE]);
+    await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(GIT_SKILL_SOURCE));
     return;
   }
 
@@ -180,7 +328,7 @@ async function installSkillFromInstalledPackage(action: "安装" | "更新"): Pr
   } catch {
     throw new Error(`未找到已安装包内的 Confluence skill：${skillPath}。可重试 --skill-source npm 或 --skill-source git。`);
   }
-  await runStep(`${action} Confluence skill`, "npx", ["-y", "skills", "add", "-g", skillPath]);
+  await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(skillPath));
 }
 
 async function getInstalledPackageSkillPath(): Promise<string> {
@@ -195,11 +343,71 @@ async function installSkillFromNpmPackage(action: "安装" | "更新"): Promise<
     const stdout = await runCommandOutput("npm", ["pack", `${PACKAGE_NAME}@latest`, "--pack-destination", tempDir, "--silent"]);
     const tarballName = stdout.trim().split("\n").filter(Boolean).at(-1);
     if (!tarballName) throw new Error("npm pack 没有返回包文件名");
+
     await runStep("解压 Confluence npm 包", "tar", ["-xzf", path.join(tempDir, tarballName), "-C", tempDir]);
-    await runStep(`${action} Confluence skill`, "npx", ["-y", "skills", "add", "-g", path.join(tempDir, "package")]);
+    await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(path.join(tempDir, "package")));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+async function uninstallSkill(): Promise<void> {
+  await runNpxStepWithRetry("卸载项目级 Confluence skill", createSkillRemoveArgs(false));
+  await runNpxStepWithRetry("卸载全局级 Confluence skill", createSkillRemoveArgs(true));
+}
+
+async function uninstallPackage(): Promise<void> {
+  await runStep("卸载 Confluence CLI", "npm", ["uninstall", "-g", PACKAGE_NAME]);
+  await cleanupGlobalPackageResidues();
+}
+
+async function cleanupGlobalPackageResidues(): Promise<void> {
+  const globalNodeModules = (await runCommandOutput("npm", ["root", "-g"])).trim();
+  if (globalNodeModules) {
+    await rm(path.join(globalNodeModules, PACKAGE_NAME), { recursive: true, force: true });
+    const scopeDir = path.join(globalNodeModules, "@cloudglab");
+    let entries: string[] = [];
+    try {
+      entries = await readdir(scopeDir);
+    } catch {
+      entries = [];
+    }
+    await Promise.all(entries
+      .filter((entry) => entry.startsWith(".confluence-cli-"))
+      .map((entry) => rm(path.join(scopeDir, entry), { recursive: true, force: true })));
+  }
+
+  await cleanupNpxResidues();
+}
+
+async function cleanupNpxResidues(): Promise<void> {
+  const npxCacheDir = path.join(os.homedir(), ".npm", "_npx");
+  let entries: string[] = [];
+  try {
+    entries = await readdir(npxCacheDir);
+  } catch {
+    return;
+  }
+
+  await Promise.all(entries.map(async (entry) => {
+    const hashDir = path.join(npxCacheDir, entry);
+    const cloudglabDir = path.join(hashDir, "node_modules", "@cloudglab");
+    let cloudglabEntries: string[] = [];
+    try {
+      cloudglabEntries = await readdir(cloudglabDir);
+    } catch {
+      return;
+    }
+
+    const hasConfluenceCli = cloudglabEntries.some((item) => item === "confluence-cli" || item.startsWith(".confluence-cli-"));
+    if (hasConfluenceCli) {
+      await rm(hashDir, { recursive: true, force: true });
+    }
+  }));
+}
+
+async function removeConfigFile(): Promise<void> {
+  await rm(path.join(os.homedir(), ".confluence", "config.json"), { force: true });
 }
 
 async function ensureValidConfluenceConfig(): Promise<void> {
@@ -258,8 +466,8 @@ function renderBanner(): string {
     "  /\\  \\     /\\  \\     /\\__\\     /\\  \\     /\\__\\     /\\__\\     /\\  \\     /\\__\\     /\\  \\     /\\  \\  ",
     " /::\\  \\   /::\\  \\   /:| _|_   /::\\  \\   /:/  /    /:/ _/_   /::\\  \\   /:| _|_   /::\\  \\   /::\\  \\ ",
     "/:/\\:\\__\\ /:/\\:\\__\\ /::|/\\__\\ /::\\:\\__\\ /:/__/    /:/_/\\__\\ /::\\:\\__\\ /::|/\\__\\ /:/\\:\\__\\ /::\\:\\__\\",
-    "\\:\\ \\/__/ \\:\\/:/  / \\/|::/  / \\/\\:\\/__/ \\:\\  \\    \\:\\/:/  / \\:\\:\\/  / \\/|::/  / \\:\\ \\/__/ \\:\\:\\/  /",
-    " \\:\\__\\    \\::/  /    |:/  /     \\/__/   \\:\\__\\    \\::/  /   \\:\\/  /    |:/  /   \\:\\__\\    \\:\\/  / ",
-    "  \\/__/     \\/__/     \\/__/               \\/__/     \\/__/     \\/__/     \\/__/     \\/__/     \\/__/ ",
+    "\\:\\ \/__/ \\:\\/:/  / \\/|::/  / \\/\\:\\/__/ \\:\\  \\    \\:\\/:/  / \\:\\:\\/  / \\/|::/  / \\:\\ \/__/ \\:\\:\\/  /",
+    " \\:\\__\\    \\::/  /    |:/  /     \/__/   \\:\\__\\    \\::/  /   \\:\\/  /    |:/  /   \\:\\__\\    \\:\\/  / ",
+    "  \/__/     \/__/     \/__/               \/__/     \/__/     \/__/     \/__/     \/__/     \/__/ ",
   ].join("\n");
 }

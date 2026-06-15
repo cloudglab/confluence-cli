@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CliRegistry } from "../core/cli-registry.js";
-import { runInstallCommand, runUpdateCommand } from "../install.js";
+import { runInstallCommand, runUninstallCommand, runUpdateCommand } from "../install.js";
 import { jsonResult } from "../utils/result.js";
 
 const installSchema = z.object({
@@ -9,6 +9,13 @@ const installSchema = z.object({
   "skip-config-check": z.boolean().optional().default(false).describe("跳过配置校验"),
   "cli-only": z.boolean().optional().default(false).describe("只安装 CLI"),
   "skill-only": z.boolean().optional().default(false).describe("只安装 skill"),
+});
+
+const uninstallSchema = z.object({
+  confirm: z.boolean().optional().default(false).describe("确认真实卸载"),
+  "keep-config": z.boolean().optional().default(false).describe("保留本地配置"),
+  "cli-only": z.boolean().optional().default(false).describe("只卸载 CLI"),
+  "skill-only": z.boolean().optional().default(false).describe("只卸载 skill"),
 });
 
 export function registerInstallTools(registry: CliRegistry): void {
@@ -23,6 +30,18 @@ export function registerInstallTools(registry: CliRegistry): void {
     await runUpdateCommand(args);
     return jsonResult({ ok: true, command: "update", args });
   }, "Update CLI and skill");
+
+  registry.tool("uninstall", uninstallSchema, async (input) => {
+    const args = toInstallArgs(input);
+    await runUninstallCommand(args);
+    return jsonResult({ ok: true, command: "uninstall", args });
+  }, "Uninstall CLI and skill");
+
+  registry.tool("remove", uninstallSchema, async (input) => {
+    const args = toInstallArgs(input);
+    await runUninstallCommand(args);
+    return jsonResult({ ok: true, command: "remove", args });
+  }, "Remove CLI and skill");
 }
 
 function toInstallArgs(input: Record<string, unknown>): string[] {

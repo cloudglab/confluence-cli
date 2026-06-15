@@ -3,6 +3,8 @@
 export const commandToGroup: Record<string, string> = {
   "initConfluence": "init",
   "install": "install",
+  "remove": "install",
+  "uninstall": "install",
   "update": "install",
   "convertMarkdownToWiki": "convert",
   "convertMermaidToDrawio": "convert",
@@ -38,6 +40,8 @@ export const groupCommands: Record<string, string[]> = {
   ],
   "install": [
     "install",
+    "remove",
+    "uninstall",
     "update"
   ],
   "convert": [
