@@ -2,17 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
-## 0.0.2 - 2026-06-16
+## 0.0.3 - 2026-06-16
 
 ### Fixed
 
-- `createSkillAddArgs` 默认向 `npx -y skills add <source> --yes` 追加 `--global`，让 `npx -y @cloudglab/confluence-cli@latest install` 把 skill 装到 user-level 全局目录（`vercel-labs/skills` 的 `-g, --global` 选项）。修复 `npx ... install` 在 npx 临时目录里跑完被清理、导致 agent 找不到 skill 的问题。
-- `tests/install.test.ts` 同步更新 3 处 `npx -y skills add` 期望参数为 `--global --yes`，覆盖默认安装、`--skill-source=npm` 与 `--skill-local-path` 三条路径。
+- 撤掉 0.0.2 在 `npx -y skills add` 命令里默认追加的 `--global`。`vercel-labs/skills` 在 agent 内运行时本身就走项目级（`cwd` 下对应 agent 的 skills 目录），与 npx 临时目录是否被回收无关；强制传 `--global` 会让不支持全局安装的 agent（如 `PromptScript`，见 `vercel-labs/skills` `src/installer.ts`）直接报 `does not support global skill installation`。
+- 新增 `--skill-global` opt-in 标记，用户明确需要 user-level 全局时通过 `confluence install --skill-global true` / `confluence update --skill-global true` 显式开启。`InstallOptions` 新增 `skillGlobal: boolean`（默认 `false`），CLI 工具层 schema 与 help 文本同步更新。
+- `runUninstallCommand` 链路行为不变（仍同时清理项目级与全局级残留），0.0.2 升级到 0.0.3 不会丢清理路径。
 
-### Notes
+### Tests
 
-- `runUninstallCommand` 链路已经通过 `createSkillRemoveArgs(true)` 覆盖全局 skill 清理，升级到 0.0.2 后 `confluence uninstall --confirm true` 会同时清理项目级与全局级残留，幂等。
-- 0.0.1 → 0.0.2 升级仅影响 `npx ... install` / `npx ... update` 触发的 skill 安装路径，已经在 0.0.1 装到项目级的用户可以重新执行 `npx -y @cloudglab/confluence-cli@latest install` 让 skill 迁回全局。
+- `tests/install.test.ts` 回退 3 处 `npx -y skills add` 期望参数为 `--yes`（默认项目级），新增 `--skill-global true` 用例验证 opt-in 路径会追加 `--global`。
+- `tests/cli.test.ts` / `tests/update-probe.test.ts` 硬编码版本号同步 0.0.2 → 0.0.3。
+
+## 0.0.2 - 2026-06-16（已撤回）
+
+> 0.0.2 在 `createSkillAddArgs` 里默认传 `--global`，对不支持全局的 agent 不可用，发布后已被 0.0.3 撤回。已通过 `npm deprecate` 标记，请直接升级到 0.0.3。
+
+### Reverted by 0.0.3
+
+- 撤掉 `createSkillAddArgs` 默认追加的 `--global`；改回 `--yes`（项目级）。
+- `runUninstallCommand` 链路保持兼容。
 
 ## 0.0.1 - 2026-06-15
 

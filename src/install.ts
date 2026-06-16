@@ -14,6 +14,7 @@ type SkillSource = "local" | "git" | "npm";
 interface InstallOptions {
   skillSource: SkillSource;
   skillLocalPath?: string;
+  skillGlobal: boolean;
   skipConfigCheck: boolean;
   cliOnly: boolean;
   skillOnly: boolean;
@@ -79,6 +80,7 @@ function printSuccessGuide(action: "安装" | "更新", status: string): void {
 常用配置：
   confluence update                       更新 CLI 和 Skill
   confluence install --skip-config-check  仅安装，跳过配置校验
+  confluence install --skill-global       把 skill 装到 user-level 全局目录
   CONFLUENCE_DISABLE_WRITE=true           禁用真实写操作
 
 写操作提示：真实写入仍需显式传 confirm=true。
@@ -88,6 +90,7 @@ function printSuccessGuide(action: "安装" | "更新", status: string): void {
 function parseInstallOptions(args: string[]): InstallOptions {
   let skillSource: SkillSource = "local";
   let skillLocalPath: string | undefined;
+  let skillGlobal = false;
   let skipConfigCheck = false;
   let cliOnly = false;
   let skillOnly = false;
@@ -107,6 +110,13 @@ function parseInstallOptions(args: string[]): InstallOptions {
     if (arg === "--skill-local-path" || arg.startsWith("--skill-local-path=")) {
       skillLocalPath = readRequiredOptionValue(args, index, "--skill-local-path");
       if (arg === "--skill-local-path") index += 1;
+      continue;
+    }
+
+    if (arg === "--skill-global" || arg.startsWith("--skill-global=")) {
+      const parsed = readBooleanFlag(args, index, "--skill-global");
+      skillGlobal = parsed.value;
+      index += parsed.consumedArgs;
       continue;
     }
 
@@ -138,7 +148,7 @@ function parseInstallOptions(args: string[]): InstallOptions {
     throw new Error("--cli-only 和 --skill-only 不能同时使用");
   }
 
-  return { skillSource, skillLocalPath, skipConfigCheck, cliOnly, skillOnly };
+  return { skillSource, skillLocalPath, skillGlobal, skipConfigCheck, cliOnly, skillOnly };
 }
 
 function parseUninstallOptions(args: string[]): UninstallOptions {
@@ -201,11 +211,11 @@ function shouldRemoveConfig(options: UninstallOptions): boolean {
   return !options.keepConfig && !options.cliOnly && !options.skillOnly;
 }
 
-function createSkillAddArgs(source: string): string[] {
-  // 默认装到全局（user-level）skill 目录，避免 `npx ... install` 在临时目录里
-  // 跑完被回收、导致 agent 找不到 skill。`--global` 与 `--yes` 配合 vercel-labs/skills
-  // 的 add 选项；卸载时通过 createSkillRemoveArgs(true) 同样走全局路径。
-  return ["-y", "skills", "add", source, "--global", "--yes"];
+function createSkillAddArgs(source: string, global = false): string[] {
+  // 默认走 vercel-labs/skills 推荐的项目级（cwd 下 agent skills 目录），
+  // 兼容所有 agent（包括不支持 --global 的，如 PromptScript）。
+  // 用户明确需要 user-level 全局时再通过 --skill-global 显式开启。
+  return ["-y", "skills", "add", source, ...(global ? ["--global"] : []), "--yes"];
 }
 
 function createSkillRemoveArgs(global = false): string[] {
@@ -307,31 +317,31 @@ async function runNpxStepWithRetry(title: string, args: string[]): Promise<void>
 
 async function installSkill(action: "安装" | "更新", options: InstallOptions): Promise<void> {
   if (options.skillLocalPath) {
-    await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(path.resolve(options.skillLocalPath)));
+    await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(path.resolve(options.skillLocalPath), options.skillGlobal));
     return;
   }
 
   if (options.skillSource === "local") {
-    await installSkillFromInstalledPackage(action);
+    await installSkillFromInstalledPackage(action, options.skillGlobal);
     return;
   }
 
   if (options.skillSource === "git") {
-    await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(GIT_SKILL_SOURCE));
+    await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(GIT_SKILL_SOURCE, options.skillGlobal));
     return;
   }
 
-  await installSkillFromNpmPackage(action);
+  await installSkillFromNpmPackage(action, options.skillGlobal);
 }
 
-async function installSkillFromInstalledPackage(action: "安装" | "更新"): Promise<void> {
+async function installSkillFromInstalledPackage(action: "安装" | "更新", skillGlobal: boolean): Promise<void> {
   const skillPath = await getInstalledPackageSkillPath();
   try {
     await access(skillPath);
   } catch {
     throw new Error(`未找到已安装包内的 Confluence skill：${skillPath}。可重试 --skill-source npm 或 --skill-source git。`);
   }
-  await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(skillPath));
+  await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(skillPath, skillGlobal));
 }
 
 async function getInstalledPackageSkillPath(): Promise<string> {
@@ -340,7 +350,7 @@ async function getInstalledPackageSkillPath(): Promise<string> {
   return path.join(globalNodeModules, PACKAGE_NAME, "skills", "confluence-cli");
 }
 
-async function installSkillFromNpmPackage(action: "安装" | "更新"): Promise<void> {
+async function installSkillFromNpmPackage(action: "安装" | "更新", skillGlobal: boolean): Promise<void> {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "confluence-cli-skill-"));
   try {
     const stdout = await runCommandOutput("npm", ["pack", `${PACKAGE_NAME}@latest`, "--pack-destination", tempDir, "--silent"]);
@@ -348,7 +358,7 @@ async function installSkillFromNpmPackage(action: "安装" | "更新"): Promise<
     if (!tarballName) throw new Error("npm pack 没有返回包文件名");
 
     await runStep("解压 Confluence npm 包", "tar", ["-xzf", path.join(tempDir, tarballName), "-C", tempDir]);
-    await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(path.join(tempDir, "package")));
+    await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(path.join(tempDir, "package"), skillGlobal));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

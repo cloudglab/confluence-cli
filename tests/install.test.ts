@@ -67,7 +67,7 @@ describe("install command", () => {
       { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
       { command: "npm", args: ["root", "-g"] },
-      { command: "npx", args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--global", "--yes"] },
+      { command: "npx", args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--yes"] },
     ]);
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("安装完成，已跳过 Confluence 配置校验。"));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("   ___       ___"));
@@ -87,8 +87,23 @@ describe("install command", () => {
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
       { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"] },
       { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
-      { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--global", "--yes"] },
-      { command: "npx", args: ["-y", "skills", "add", path.resolve("./local-skill"), "--global", "--yes"] },
+      { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--yes"] },
+      { command: "npx", args: ["-y", "skills", "add", path.resolve("./local-skill"), "--yes"] },
+    ]);
+  });
+
+  it("--skill-global true 时给 npx skills add 追加 --global", async () => {
+    mockSpawn(new Map([["npm root -g", "/usr/local/lib/node_modules\n"]]));
+    mockInstallDependencies();
+    const { runInstallCommand } = await import("../src/install.js");
+
+    await runInstallCommand(["--skill-global", "true", "--skip-config-check"]);
+
+    expect(commandCalls).toEqual([
+      { command: "npm", args: ["root", "-g"] },
+      { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
+      { command: "npm", args: ["root", "-g"] },
+      { command: "npx", args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--global", "--yes"] },
     ]);
   });
 
