@@ -8,6 +8,7 @@ import { writeUpdateCacheAfterInstall } from "./update-probe.js";
 
 const PACKAGE_NAME = "@cloudglab/confluence-cli";
 const GIT_SKILL_SOURCE = "cloudglab/confluence-cli";
+const MMD_CLI_INSTALL_URL = "https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh";
 
 type SkillSource = "local" | "git" | "npm";
 
@@ -81,6 +82,7 @@ function printSuccessGuide(action: "安装" | "更新", status: string): void {
   confluence update                       更新 CLI 和 Skill
   confluence install --skip-config-check  仅安装，跳过配置校验
   confluence install --skill-global       把 skill 装到 user-level 全局目录
+  mmd-cli --version                       检查 Mermaid 渲染器
   CONFLUENCE_DISABLE_WRITE=true           禁用真实写操作
 
 写操作提示：真实写入仍需显式传 confirm=true。
@@ -200,7 +202,7 @@ function parseUninstallOptions(args: string[]): UninstallOptions {
 function printUninstallPreview(options: UninstallOptions): void {
   const steps = [
     ...(!options.cliOnly ? ["卸载 confluence skill（项目级和全局级）"] : []),
-    ...(!options.skillOnly ? ["卸载全局 CLI 包并清理 npm 残留目录"] : []),
+    ...(!options.skillOnly ? ["卸载全局 CLI 包、清理 npm 残留目录，并删除 mmd-cli 二进制"] : []),
     ...(shouldRemoveConfig(options) ? ["删除 ~/.confluence/config.json"] : ["保留 ~/.confluence/config.json"]),
   ];
 
@@ -276,6 +278,7 @@ async function installPackageAndSkill(action: "安装" | "更新", options: Inst
   if (!options.skillOnly) {
     await cleanupGlobalPackageResidues();
     await installGlobalCli(action);
+    await installMmdCli(action);
   }
   if (!options.cliOnly) {
     await installSkill(action, options);
@@ -295,6 +298,10 @@ async function installGlobalCli(action: "安装" | "更新"): Promise<void> {
     await cleanupGlobalPackageResidues();
     await runStep(`${action} Confluence CLI`, "npm", args);
   }
+}
+
+async function installMmdCli(action: "安装" | "更新"): Promise<void> {
+  await runStep(`${action} Mermaid 原生渲染器 mmd-cli`, "sh", ["-c", `curl -fsSL ${MMD_CLI_INSTALL_URL} | sh`]);
 }
 
 function isNpmDirectoryNotEmptyError(error: unknown): boolean {
@@ -372,6 +379,12 @@ async function uninstallSkill(): Promise<void> {
 async function uninstallPackage(): Promise<void> {
   await runStep("卸载 Confluence CLI", "npm", ["uninstall", "-g", PACKAGE_NAME]);
   await cleanupGlobalPackageResidues();
+  await removeMmdCliBinary();
+}
+
+async function removeMmdCliBinary(): Promise<void> {
+  await rm(path.join(os.homedir(), ".local", "bin", "mmd-cli"), { force: true });
+  await rm("/usr/local/bin/mmd-cli", { force: true });
 }
 
 async function cleanupGlobalPackageResidues(): Promise<void> {
@@ -437,7 +450,7 @@ async function runStep(title: string, command: string, args: string[]): Promise<
 
 function runCommand(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { shell: process.platform === "win32" });
+    const child = spawn(command, args, { shell: process.platform === "win32", env: createInstallEnv() });
     let stderr = "";
     child.stdout?.pipe(process.stdout);
     child.stderr?.on("data", (chunk: Buffer) => {
@@ -457,7 +470,7 @@ function runCommand(command: string, args: string[]): Promise<void> {
 
 function runCommandOutput(command: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { shell: process.platform === "win32" });
+    const child = spawn(command, args, { shell: process.platform === "win32", env: createInstallEnv() });
     let stdout = "";
     let stderr = "";
     child.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
@@ -471,6 +484,13 @@ function runCommandOutput(command: string, args: string[]): Promise<string> {
       reject(new Error(`${command} ${args.join(" ")} 执行失败，退出码 ${String(code)}${stderr ? `：${stderr.trim()}` : ""}`));
     });
   });
+}
+
+function createInstallEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    CI: process.env.CI ?? "true",
+  };
 }
 
 function renderBanner(): string {

@@ -66,6 +66,7 @@ describe("install command", () => {
     expect(commandCalls).toEqual([
       { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
+      { command: "sh", args: ["-c", "curl -fsSL https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh | sh"] },
       { command: "npm", args: ["root", "-g"] },
       { command: "npx", args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--yes"] },
     ]);
@@ -85,6 +86,7 @@ describe("install command", () => {
     expect(commandCalls).toEqual([
       { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
+      { command: "sh", args: ["-c", "curl -fsSL https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh | sh"] },
       { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"] },
       { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
       { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--yes"] },
@@ -102,6 +104,7 @@ describe("install command", () => {
     expect(commandCalls).toEqual([
       { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
+      { command: "sh", args: ["-c", "curl -fsSL https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh | sh"] },
       { command: "npm", args: ["root", "-g"] },
       { command: "npx", args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--global", "--yes"] },
     ]);

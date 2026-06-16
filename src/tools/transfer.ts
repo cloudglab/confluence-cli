@@ -205,9 +205,9 @@ function applyMermaidImageMacros(body: string, generatedFiles: GeneratedMermaidF
   for (let index = 0; index < generatedFiles.length; index += 1) {
     const generated = generatedFiles[index];
     const uploaded = uploadedAttachments[index];
-    const attachment = readUploadedAttachment(uploaded?.result);
-    if (!attachment) continue;
-    const macro = buildImageMacro(attachment.title ?? generated.attachmentName);
+    const attachment = readUploadedAttachment(uploaded?.result, generated.attachmentName);
+    const filename = attachment?.title ?? generated.attachmentName;
+    const macro = buildImageMacro(filename);
     output = output.replaceAll(`<p>${generated.marker}</p>`, macro).replaceAll(generated.marker, macro);
   }
   return output;
@@ -217,12 +217,23 @@ function buildImageMacro(filename: string): string {
   return `<ac:image><ri:attachment ri:filename="${escapeXml(filename)}" /></ac:image>`;
 }
 
-function readUploadedAttachment(value: unknown): { id: string; title?: string; version?: { number?: number } } | undefined {
+interface UploadedAttachment {
+  id: string;
+  title?: string;
+  version?: { number?: number };
+}
+
+function readUploadedAttachment(value: unknown, expectedTitle?: string): UploadedAttachment | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   if ("results" in value && Array.isArray((value as { results?: unknown }).results)) {
-    return (value as { results?: Array<{ id: string; title?: string; version?: { number?: number } }> }).results?.[0];
+    const list = (value as { results?: UploadedAttachment[] }).results ?? [];
+    if (expectedTitle) {
+      const matched = list.find((entry) => entry?.title === expectedTitle);
+      if (matched) return matched;
+    }
+    return list[0];
   }
-  if ("id" in value) return value as { id: string; title?: string; version?: { number?: number } };
+  if ("id" in value) return value as UploadedAttachment;
   return undefined;
 }
 
@@ -424,28 +435,28 @@ function createMermaidFile(mermaidSource: string, pageTitle: string, sourceFile:
 function renderMermaidFile(mermaidSource: string, outputFile: string, renderKind: MermaidRenderKind): void {
   const inputFile = join(dirname(outputFile), `${basename(outputFile, extname(outputFile))}.mmd`);
   writeFileSync(inputFile, mermaidSource, "utf8");
-  const mmdc = resolveMmdcBin();
+  const mmdCli = resolveMmdCliBin();
   const args = ["-i", inputFile, "-o", outputFile, "-b", "transparent"];
   if (renderKind === "png") {
-    args.push("--scale", "3");
+    args.push("-s", "3");
   }
   try {
-    execFileSync(mmdc, args, { stdio: "pipe" });
+    execFileSync(mmdCli, args, { stdio: "pipe" });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to render Mermaid as ${renderKind} with mermaid-cli: ${message}`);
+    throw new Error(`Failed to render Mermaid as ${renderKind} with mmd-cli: ${message}`);
   }
 }
 
-function resolveMmdcBin(): string {
-  const extension = process.platform === "win32" ? ".cmd" : "";
+function resolveMmdCliBin(): string {
+  const extension = process.platform === "win32" ? ".exe" : "";
   const candidates = [
-    join(process.cwd(), "node_modules", ".bin", `mmdc${extension}`),
-    join(dirname(process.argv[1] ?? process.cwd()), "..", "node_modules", ".bin", `mmdc${extension}`),
+    join(process.env.HOME ?? "", ".local", "bin", `mmd-cli${extension}`),
+    "/usr/local/bin/mmd-cli",
   ];
   const found = candidates.find((candidate) => existsSync(candidate));
   if (found) return found;
-  return `mmdc${extension}`;
+  return `mmd-cli${extension}`;
 }
 
 function safeFileName(value: string): string {

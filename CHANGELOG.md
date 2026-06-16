@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.0.4 - 2026-06-17
+
+### 修复
+
+- Mermaid 渲染器从 `@mermaid-js/mermaid-cli` 全量替换为 `coolamit/mermaid-cli` 的原生二进制 `mmd-cli`，不再保留 `mmdc` / Puppeteer 兼容路径。
+- `install` / `update` 链路会自动执行上游 `mmd-cli` 安装脚本，避免 npm 安装阶段拉取 Chrome 失败。
+- `uninstall` 链路会一并清理 `~/.local/bin/mmd-cli` 和 `/usr/local/bin/mmd-cli`。
+- `uploadMarkdown` 的 Mermaid 附件匹配逻辑改为优先按预期文件名命中，减少多附件场景下图片宏指向错误的问题。
+
+### 测试
+
+- `tests/install.test.ts` 新增 `mmd-cli` 安装步骤断言，覆盖 install / update 流程。
+- `tests/tools/transfer.test.ts` 新增 Mermaid 渲染调用测试，校验 `mmd-cli` 的输入、输出、背景和缩放参数。
+
+### 说明
+
+- `mmd-cli` 运行时仍要求系统已有 Chrome/Chromium；如果目标机器没有浏览器，可在上传时传 `--mermaid none`，保留 Mermaid 代码块。
+
 ## 0.0.3 - 2026-06-16
 
 ### Fixed

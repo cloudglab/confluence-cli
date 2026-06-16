@@ -1,6 +1,6 @@
 {
   "name": "@cloudglab/confluence-cli",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Confluence REST CLI for agents and local automation",
   "repository": {
     "type": "git",
@@ -38,7 +38,6 @@
     "prepare": "node scripts/prepare.mjs"
   },
   "dependencies": {
-    "@mermaid-js/mermaid-cli": "^11.15.0",
     "@whitebite/diagram-converter": "^0.2.0",
     "axios": "^1.7.9",
     "marked": "^18.0.5",

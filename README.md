@@ -21,6 +21,10 @@ pnpm test
 pnpm release:smoke-query --dry-run
 ```
 
+从 `0.0.4` 起，Mermaid 渲染不再依赖 `@mermaid-js/mermaid-cli`。CLI 安装/更新时会自动安装 `coolamit/mermaid-cli` 提供的原生二进制 `mmd-cli`，避开 Puppeteer/Chrome 下载链路，并在卸载时清理常见安装位置下的 `mmd-cli` 二进制。
+
+`mmd-cli` 运行时仍需要系统已有 Chrome/Chromium；如果机器完全没有浏览器，可在上传时传 `--mermaid none`，保留 Mermaid 代码块。
+
 安装/更新入口：
 
 ```bash
@@ -132,7 +136,7 @@ CONFLUENCE_SKIP_UPDATE_CHECK=true
 - Confluence 7.13.7 全量 REST API 端点注册与通用调用
 - MCP 页面/子页/评论/标签能力的语义化 CLI 命令
 - Markdown 转 Confluence Wiki Markup
-- Markdown/HTML 上传时默认用 `mermaid-cli` 将 Mermaid 渲染为 PNG 附件并以内置图片宏展示，必要时可用 `--mermaid none` 保留原代码块
+- Markdown/HTML 上传时默认用 `mmd-cli` 将 Mermaid 渲染为 PNG 附件并以内置图片宏展示，必要时可用 `--mermaid none` 保留原代码块
 - mark 风格 metadata 生成
 - Markdown 上传预览、确认写入和附件上传
 - 页面下载为带 frontmatter 的 Markdown，并可下载附件和一层子页
@@ -143,7 +147,7 @@ CONFLUENCE_SKIP_UPDATE_CHECK=true
 
 `.opencode/opencode.json` 提供了两个项目级 OpenCode 命令：
 
-- `release`：复刻 zentao-cli 的 `/release` 流程，按 12 步固定顺序准备发布；默认手动发包，**未经再次授权不会执行 `npm publish`、`git push`、打 tag 或创建 GitHub Release**。
+- `release`：复刻 zentao-cli 的 `/release` 流程，按 14 步固定顺序准备发布；默认手动发包，**未经再次授权不会执行 `npm publish`、`git push`、打 tag 或创建 GitHub Release**。
 - `smoke`：检查当前 CLI 的烟测与验证入口（`pnpm release:smoke-query --dry-run`、`pnpm typecheck`、`pnpm build` 等）。
 
 修改 `.opencode/opencode.json` 后，需要退出并重启 OpenCode 才能生效。
