@@ -202,7 +202,10 @@ function shouldRemoveConfig(options: UninstallOptions): boolean {
 }
 
 function createSkillAddArgs(source: string): string[] {
-  return ["-y", "skills", "add", source, "--yes"];
+  // 默认装到全局（user-level）skill 目录，避免 `npx ... install` 在临时目录里
+  // 跑完被回收、导致 agent 找不到 skill。`--global` 与 `--yes` 配合 vercel-labs/skills
+  // 的 add 选项；卸载时通过 createSkillRemoveArgs(true) 同样走全局路径。
+  return ["-y", "skills", "add", source, "--global", "--yes"];
 }
 
 function createSkillRemoveArgs(global = false): string[] {

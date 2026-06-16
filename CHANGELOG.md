@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.0.2 - 2026-06-16
+
+### Fixed
+
+- `createSkillAddArgs` 默认向 `npx -y skills add <source> --yes` 追加 `--global`，让 `npx -y @cloudglab/confluence-cli@latest install` 把 skill 装到 user-level 全局目录（`vercel-labs/skills` 的 `-g, --global` 选项）。修复 `npx ... install` 在 npx 临时目录里跑完被清理、导致 agent 找不到 skill 的问题。
+- `tests/install.test.ts` 同步更新 3 处 `npx -y skills add` 期望参数为 `--global --yes`，覆盖默认安装、`--skill-source=npm` 与 `--skill-local-path` 三条路径。
+
+### Notes
+
+- `runUninstallCommand` 链路已经通过 `createSkillRemoveArgs(true)` 覆盖全局 skill 清理，升级到 0.0.2 后 `confluence uninstall --confirm true` 会同时清理项目级与全局级残留，幂等。
+- 0.0.1 → 0.0.2 升级仅影响 `npx ... install` / `npx ... update` 触发的 skill 安装路径，已经在 0.0.1 装到项目级的用户可以重新执行 `npx -y @cloudglab/confluence-cli@latest install` 让 skill 迁回全局。
+
 ## 0.0.1 - 2026-06-15
 
 ### Added

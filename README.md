@@ -32,6 +32,8 @@ confluence-reader list
 confluence-writer list
 ```
 
+> `install` / `update` 默认把 Confluence skill 装到 user-level 全局目录（`npx -y skills add ... --global --yes`），不会落到当前项目目录。卸载链路会同时清理项目级与全局级残留。
+
 卸载入口（默认仅打印卸载计划，真实执行需显式确认）：
 
 ```bash
