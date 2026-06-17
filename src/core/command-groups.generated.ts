@@ -15,6 +15,8 @@ export const commandToGroup: Record<string, string> = {
   "getCurrentUser": "space",
   "getSpace": "space",
   "listSpaces": "space",
+  "who-am-i": "space",
+  "whoami": "space",
   "addComment": "content",
   "deleteContent": "content",
   "findContent": "content",
@@ -59,7 +61,9 @@ export const groupCommands: Record<string, string[]> = {
     "convertContentBody",
     "getCurrentUser",
     "getSpace",
-    "listSpaces"
+    "listSpaces",
+    "who-am-i",
+    "whoami"
   ],
   "content": [
     "addComment",

@@ -4,6 +4,10 @@ import type { CliRegistry } from "../core/cli-registry.js";
 import { jsonResult } from "../utils/result.js";
 
 export function registerSpaceTools(registry: CliRegistry): void {
+  const getCurrentUser = async () => {
+    return jsonResult(await getApi().getCurrentUser());
+  };
+
   registry.tool(
     "listSpaces",
     z.object({ limit: z.number().int().positive().max(100).default(25) }),
@@ -25,10 +29,22 @@ export function registerSpaceTools(registry: CliRegistry): void {
   registry.tool(
     "getCurrentUser",
     z.object({}),
-    async () => {
-      return jsonResult(await getApi().getCurrentUser());
-    },
+    getCurrentUser,
     "Get current authenticated Confluence user",
+  );
+
+  registry.tool(
+    "whoami",
+    z.object({}),
+    getCurrentUser,
+    "Show current authenticated Confluence user",
+  );
+
+  registry.tool(
+    "who-am-i",
+    z.object({}),
+    getCurrentUser,
+    "Alias of whoami",
   );
 
   registry.tool(

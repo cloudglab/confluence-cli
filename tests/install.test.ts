@@ -72,7 +72,7 @@ describe("install command", () => {
     expect(commandCalls).toEqual([
       { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
-      { command: "sh", args: ["-c", "curl -fsSL https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh | sh"] },
+      { command: "npm", args: ["install", "-g", "beautiful-mermaid-cli@latest"] },
       { command: "npm", args: ["root", "-g"] },
       { command: "npx", args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--yes"] },
     ]);
@@ -81,11 +81,11 @@ describe("install command", () => {
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("快速开始："));
   });
 
-  it("本地 skill 缺失时自动回退到 npm 包解压安装，mmd-cli 失败不阻断安装", async () => {
+  it("本地 skill 缺失时自动回退到 npm 包解压安装，Mermaid 渲染器失败不阻断安装", async () => {
     const plan = createSpawnPlan([
       { command: "npm", args: ["root", "-g"], stdout: "/usr/local/lib/node_modules\n" },
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
-      { command: "sh", args: ["-c", "curl -fsSL https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh | sh"], code: 35, stderr: "curl: (35) LibreSSL SSL_connect: SSL_ERROR_SYSCALL in connection to raw.githubusercontent.com:443\n" },
+      { command: "npm", args: ["install", "-g", "beautiful-mermaid-cli@latest"], code: 1, stderr: "npm ERR! network timeout\n" },
       { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"], stdout: "cloudglab-confluence-cli-0.1.0.tgz\n" },
       { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
       { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--yes"] },
@@ -143,13 +143,13 @@ describe("install command", () => {
     expect(commandCalls).toEqual([
       { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
-      { command: "sh", args: ["-c", "curl -fsSL https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh | sh"] },
+      { command: "npm", args: ["install", "-g", "beautiful-mermaid-cli@latest"] },
       { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"] },
       { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
       { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--yes"] },
     ]);
-    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("已跳过 mmd-cli 安装："));
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("已跳过 beautiful-mermaid-cli 安装："));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("正在自动回退到 npm 包解压安装"));
     expect(stderr).toHaveBeenCalled();
   });
@@ -165,7 +165,7 @@ describe("install command", () => {
     expect(commandCalls).toEqual([
       { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
-      { command: "sh", args: ["-c", "curl -fsSL https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh | sh"] },
+      { command: "npm", args: ["install", "-g", "beautiful-mermaid-cli@latest"] },
       { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"] },
       { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
       { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--yes"] },
@@ -183,7 +183,7 @@ describe("install command", () => {
     expect(commandCalls).toEqual([
       { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
-      { command: "sh", args: ["-c", "curl -fsSL https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh | sh"] },
+      { command: "npm", args: ["install", "-g", "beautiful-mermaid-cli@latest"] },
       { command: "npm", args: ["root", "-g"] },
       { command: "npx", args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--global", "--yes"] },
     ]);

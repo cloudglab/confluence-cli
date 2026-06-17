@@ -181,5 +181,18 @@ function parseCli(argv: string[]): { command?: string; commandArgs: string[]; ro
     args.splice(roleIndex, 2);
   }
 
-  return { command: args[0], commandArgs: args.slice(1), role };
+  const normalized = normalizeCommandAlias(args[0], args.slice(1));
+  return {
+    command: normalized.command,
+    commandArgs: args.slice(1 + normalized.consumedArgs),
+    role,
+  };
+}
+
+function normalizeCommandAlias(command: string | undefined, args: string[]): { command: string | undefined; consumedArgs: number } {
+  if (command === "who" && args[0] === "am" && args[1] === "i") {
+    return { command: "whoami", consumedArgs: 2 };
+  }
+
+  return { command, consumedArgs: 0 };
 }

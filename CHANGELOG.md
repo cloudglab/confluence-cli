@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+## 0.0.6 - 2026-06-17
+
+### 变更
+
+- Mermaid 图片渲染从 `mmd-cli` 切换为 `beautiful-mermaid-cli` 的 `bm render`，默认 PNG/SVG 渲染不再依赖本机 Chrome、Chromium、Puppeteer 或原生编译工具链。
+- `install` / `update` 改为通过 `npm install -g beautiful-mermaid-cli@latest` 安装 Mermaid 渲染器，不再执行 `raw.githubusercontent.com` 上的 `curl | sh` 安装脚本。
+- 项目运行要求从 Node.js 18+ 提升到 Node.js 20+，与 `beautiful-mermaid-cli` 的运行时要求保持一致。
+- 对齐 `zentao-cli` 的通用账号命令，新增 `whoami`、`who-am-i`，并支持 `confluence who am i` 口语化输入，均复用 `getCurrentUser` 查询当前 Confluence 账号。
+
+### 测试
+
+- `tests/install.test.ts` 同步断言新的 `beautiful-mermaid-cli` 安装链路，并保留安装失败不阻断主流程的回归覆盖。
+- `tests/tools/transfer.test.ts` 同步校验 `bm render <file> -o <png> --json --scale 3` 调用参数。
+- `tests/cli.test.ts` 和 `tests/tools/spaces.test.ts` 覆盖 `whoami` / `who-am-i` 注册、命令列表展示和 `who am i` 归一化。
+
 ## 0.0.5 - 2026-06-17
 
 ### 修复

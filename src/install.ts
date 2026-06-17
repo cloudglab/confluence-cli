@@ -8,7 +8,7 @@ import { writeUpdateCacheAfterInstall } from "./update-probe.js";
 
 const PACKAGE_NAME = "@cloudglab/confluence-cli";
 const GIT_SKILL_SOURCE = "cloudglab/confluence-cli";
-const MMD_CLI_INSTALL_URL = "https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh";
+const MERMAID_RENDERER_PACKAGE = "beautiful-mermaid-cli";
 
 type SkillSource = "local" | "git" | "npm";
 
@@ -82,7 +82,7 @@ function printSuccessGuide(action: "安装" | "更新", status: string): void {
   confluence update                       更新 CLI 和 Skill
   confluence install --skip-config-check  仅安装，跳过配置校验
   confluence install --skill-global       把 skill 装到 user-level 全局目录
-  mmd-cli --version                       检查 Mermaid 渲染器
+  bm doctor --json                       检查 Mermaid 渲染器
   CONFLUENCE_DISABLE_WRITE=true           禁用真实写操作
 
 写操作提示：真实写入仍需显式传 confirm=true。
@@ -202,7 +202,7 @@ function parseUninstallOptions(args: string[]): UninstallOptions {
 function printUninstallPreview(options: UninstallOptions): void {
   const steps = [
     ...(!options.cliOnly ? ["卸载 confluence skill（项目级和全局级）"] : []),
-    ...(!options.skillOnly ? ["卸载全局 CLI 包、清理 npm 残留目录，并删除 mmd-cli 二进制"] : []),
+    ...(!options.skillOnly ? ["卸载全局 CLI 包、清理 npm 残留目录，并卸载 Mermaid 渲染器"] : []),
     ...(shouldRemoveConfig(options) ? ["删除 ~/.confluence/config.json"] : ["保留 ~/.confluence/config.json"]),
   ];
 
@@ -278,7 +278,7 @@ async function installPackageAndSkill(action: "安装" | "更新", options: Inst
   if (!options.skillOnly) {
     await cleanupGlobalPackageResidues();
     await installGlobalCli(action);
-    await installMmdCli(action);
+    await installMermaidRenderer(action);
   }
   if (!options.cliOnly) {
     await installSkill(action, options);
@@ -300,12 +300,12 @@ async function installGlobalCli(action: "安装" | "更新"): Promise<void> {
   }
 }
 
-async function installMmdCli(action: "安装" | "更新"): Promise<void> {
+async function installMermaidRenderer(action: "安装" | "更新"): Promise<void> {
   try {
-    await runStep(`${action} Mermaid 原生渲染器 mmd-cli`, "sh", ["-c", `curl -fsSL ${MMD_CLI_INSTALL_URL} | sh`]);
+    await runStep(`${action} Mermaid 免浏览器渲染器 beautiful-mermaid-cli`, "npm", ["install", "-g", `${MERMAID_RENDERER_PACKAGE}@latest`]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    process.stdout.write(`已跳过 mmd-cli 安装：${message}\n`);
+    process.stdout.write(`已跳过 beautiful-mermaid-cli 安装：${message}\n`);
     process.stdout.write("后续如需 Mermaid 图片渲染，可稍后重试安装，或在上传时传 --mermaid none 保留代码块。\n");
   }
 }
@@ -387,12 +387,16 @@ async function uninstallSkill(): Promise<void> {
 async function uninstallPackage(): Promise<void> {
   await runStep("卸载 Confluence CLI", "npm", ["uninstall", "-g", PACKAGE_NAME]);
   await cleanupGlobalPackageResidues();
-  await removeMmdCliBinary();
+  await uninstallMermaidRenderer();
 }
 
-async function removeMmdCliBinary(): Promise<void> {
-  await rm(path.join(os.homedir(), ".local", "bin", "mmd-cli"), { force: true });
-  await rm("/usr/local/bin/mmd-cli", { force: true });
+async function uninstallMermaidRenderer(): Promise<void> {
+  try {
+    await runStep("卸载 Mermaid 免浏览器渲染器 beautiful-mermaid-cli", "npm", ["uninstall", "-g", MERMAID_RENDERER_PACKAGE]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stdout.write(`已跳过 beautiful-mermaid-cli 卸载：${message}\n`);
+  }
 }
 
 async function cleanupGlobalPackageResidues(): Promise<void> {

@@ -21,13 +21,15 @@ pnpm test
 pnpm release:smoke-query --dry-run
 ```
 
-从 `0.0.4` 起，Mermaid 渲染不再依赖 `@mermaid-js/mermaid-cli`。CLI 安装/更新时会自动安装 `coolamit/mermaid-cli` 提供的原生二进制 `mmd-cli`，避开 Puppeteer/Chrome 下载链路，并在卸载时清理常见安装位置下的 `mmd-cli` 二进制。
+Mermaid 渲染默认使用 `beautiful-mermaid-cli` 的 `bm` 命令。它通过纯 JS + WASM 渲染 SVG/PNG，不依赖 Chrome、Chromium、Puppeteer 或原生编译工具链；安装/更新时会自动执行 `npm install -g beautiful-mermaid-cli@latest`。
 
-`mmd-cli` 运行时仍需要系统已有 Chrome/Chromium；如果机器完全没有浏览器，可在上传时传 `--mermaid none`，保留 Mermaid 代码块。
+由于 `beautiful-mermaid-cli` 要求 Node.js 20+，本项目运行要求也同步提升到 Node.js 20+。如果自动安装失败，上传时仍可传 `--mermaid none` 保留 Mermaid 代码块。
 
-从 `0.0.5` 起，`install` / `update` 在以下两种情况会**继续完成安装**而不是中断：
+当前版本还补齐了 `zentao-cli` 风格的账号快捷命令：`confluence whoami`、`confluence who-am-i`，以及口语化输入 `confluence who am i`。
 
-- `mmd-cli` 官方安装脚本因网络问题失败时，会打印 `已跳过 mmd-cli 安装：<原因>` 与 `后续如需 Mermaid 图片渲染，可稍后重试安装，或在上传时传 --mermaid none 保留代码块。`。
+`install` / `update` 在以下情况会**继续完成安装**而不是中断：
+
+- `beautiful-mermaid-cli` 安装失败时，会打印 `已跳过 beautiful-mermaid-cli 安装：<原因>` 与 `后续如需 Mermaid 图片渲染，可稍后重试安装，或在上传时传 --mermaid none 保留代码块。`。
 - 全局包内 `skills/confluence-cli` 缺失时，会打印 `未找到已安装包内的 Confluence skill：<path>，正在自动回退到 npm 包解压安装...` 并自动用 `npm pack` + `tar` + `npx -y skills add` 完成 skill 安装，无需手动切换 `--skill-source npm`。
 
 安装/更新入口：
@@ -71,6 +73,7 @@ CLI 会按顺序查找：显式 `envFile`、环境变量、当前/父目录 `.en
 
 ```bash
 confluence list
+confluence whoami
 confluence searchContent --cql 'space = "DEV" AND text ~ "API"'
 confluence getContent --id 123456
 confluence listRestApis --group content
@@ -141,7 +144,7 @@ CONFLUENCE_SKIP_UPDATE_CHECK=true
 - Confluence 7.13.7 全量 REST API 端点注册与通用调用
 - MCP 页面/子页/评论/标签能力的语义化 CLI 命令
 - Markdown 转 Confluence Wiki Markup
-- Markdown/HTML 上传时默认用 `mmd-cli` 将 Mermaid 渲染为 PNG 附件并以内置图片宏展示，必要时可用 `--mermaid none` 保留原代码块
+- Markdown/HTML 上传时默认用 `beautiful-mermaid-cli` 将 Mermaid 渲染为 PNG 附件并以内置图片宏展示，必要时可用 `--mermaid none` 保留原代码块
 - mark 风格 metadata 生成
 - Markdown 上传预览、确认写入和附件上传
 - 页面下载为带 frontmatter 的 Markdown，并可下载附件和一层子页

@@ -27,6 +27,9 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   searchSpace: "搜索 Confluence 空间",
   listSpaces: "列出 Confluence 空间",
   getSpace: "获取空间详情",
+  getCurrentUser: "输出当前账号原始资料",
+  whoami: "查看当前 Confluence 账号",
+  "who-am-i": "whoami 的别名",
   searchContent: "使用 CQL 搜索内容",
   getContent: "获取页面或博客内容",
   createContent: "创建 Confluence 内容",
@@ -52,7 +55,7 @@ export function printHelp(role: Role, commandNames: string[]): void {
     "",
     `当前 role: ${role}`,
     "适配版本：Confluence Data Center / Server REST API。",
-    "运行要求：Node.js >= 18",
+    "运行要求：Node.js >= 20",
     "",
     "用法：",
     "  confluence [--role full|reader|writer] <command> [--key value]",
@@ -62,6 +65,7 @@ export function printHelp(role: Role, commandNames: string[]): void {
     "快速开始：",
     "  confluence list                 查看全部可用命令（推荐）",
     "  confluence help <command>       查看命令参数",
+    "  confluence whoami               校验当前账号",
     "  confluence initConfluence       初始化或校验连接配置",
     "  confluence version              查看版本",
     "  confluence changelog            查看最近更新",
@@ -111,6 +115,7 @@ export function printCommandList(role: Role, commandNames: string[], builtinComm
   lines.push(
     "下一步：",
     "  - 查看参数：confluence help <command>，例如 confluence help searchContent",
+    "  - 快速校验账号：confluence whoami",
     "  - 初始化配置：confluence initConfluence",
     "  - 查看脚本友好命令名：confluence list --raw",
     "  - 切换角色命令集：confluence --role reader list 或 confluence --role writer list",
@@ -236,7 +241,7 @@ interface CommandListGroup {
 
 function buildCommandGroups(commandNames: string[]): CommandListGroup[] {
   const groups: CommandListGroup[] = [
-    { title: "开始使用", match: (name) => ["changelog", "help", "list", "version", "install", "update", "upgrade", "uninstall", "remove", "initConfluence"].includes(name), commands: [] },
+    { title: "开始使用", match: (name) => ["changelog", "help", "list", "version", "install", "update", "upgrade", "uninstall", "remove", "initConfluence", "whoami", "who-am-i", "getCurrentUser"].includes(name), commands: [] },
     { title: "内容检索 / 页面", match: (name) => /Content|Page|searchContent|getContent/.test(name), commands: [] },
     { title: "上传 / 下载 / 附件", match: (name) => /Upload|Download|Attachment|upload|download/.test(name), commands: [] },
     { title: "空间 / 标签", match: (name) => /Space|Label/.test(name), commands: [] },
@@ -255,6 +260,7 @@ function buildCommandGroups(commandNames: string[]): CommandListGroup[] {
 
 function getRecommendedCommands(commandNames: string[]): Array<{ name: string; description: string }> {
   const candidates = [
+    { name: "whoami", description: "校验当前账号" },
     { name: "initConfluence", description: "初始化或校验连接配置" },
     { name: "searchContent", description: "使用 CQL 搜索页面/博客" },
     { name: "getContent", description: "读取 Confluence 内容" },

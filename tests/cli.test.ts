@@ -18,6 +18,9 @@ vi.mock("node:fs/promises", async () => {
           "getContent",
           "uploadMarkdown",
           "downloadPage",
+          "getCurrentUser",
+          "whoami",
+          "who-am-i",
           "install",
           "update",
           "uninstall",
@@ -27,6 +30,7 @@ vi.mock("node:fs/promises", async () => {
           init: ["initConfluence"],
           content: ["searchContent", "getContent"],
           transfer: ["uploadMarkdown", "downloadPage"],
+          space: ["getCurrentUser", "whoami", "who-am-i"],
           install: ["install", "update", "uninstall", "remove"]
         },
         commandToGroup: {
@@ -35,6 +39,9 @@ vi.mock("node:fs/promises", async () => {
           getContent: "content",
           uploadMarkdown: "transfer",
           downloadPage: "transfer",
+          getCurrentUser: "space",
+          whoami: "space",
+          "who-am-i": "space",
           install: "install",
           update: "install",
           uninstall: "install",
@@ -56,8 +63,10 @@ describe("runCli", () => {
     await runCli(["help"]);
 
     const output = String(write.mock.calls.at(-1)?.[0] ?? "");
-    expect(output).toContain("confluence CLI 0.0.5");
+    expect(output).toContain("confluence CLI 0.0.6");
+    expect(output).toContain("运行要求：Node.js >= 20");
     expect(output).toContain("confluence [--role full|reader|writer] <command> [--key value]");
+    expect(output).toContain("confluence whoami");
     expect(output).toContain("写操作保护");
   });
 
@@ -86,6 +95,8 @@ describe("runCli", () => {
 
     const output = String(write.mock.calls.at(-1)?.[0] ?? "");
     expect(output).toContain("confluence 可用命令");
+    expect(output).toContain("whoami");
+    expect(output).toContain("快速校验账号：confluence whoami");
     expect(output).toContain("内容检索 / 页面");
     expect(output).toContain("searchContent");
     expect(output).not.toContain("uploadMarkdown");
@@ -98,6 +109,7 @@ describe("runCli", () => {
 
     const output = String(write.mock.calls.at(-1)?.[0] ?? "");
     expect(output).toContain("changelog\n");
+    expect(output).toContain("whoami\n");
     expect(output).toContain("searchContent\n");
     expect(output).not.toContain("confluence 可用命令");
   });
@@ -170,5 +182,24 @@ describe("runCli", () => {
     await runCli(["help", "searchContent"]);
 
     expect(write).toHaveBeenCalledWith(expect.stringContaining("confluence searchContent [--key value]"));
+  });
+
+  it("normalizes who am i to whoami", async () => {
+    vi.resetModules();
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const currentUser = { username: "me", displayName: "Demo User" };
+    vi.doMock("../src/core/config.js", () => ({
+      loadConfluenceConfig: vi.fn(() => ({ apiBaseUrl: "https://confluence.example.com/rest/api", authType: "pat", personalToken: "token" })),
+    }));
+    vi.doMock("../src/api/index.js", () => ({
+      ConfluenceApi: class {
+        getCurrentUser = vi.fn(async () => currentUser);
+      },
+    }));
+
+    const { runCli: runCliWithMocks } = await import("../src/cli.js");
+    await runCliWithMocks(["who", "am", "i"]);
+
+    expect(write).toHaveBeenCalledWith(`${JSON.stringify(currentUser, null, 2)}\n`);
   });
 });

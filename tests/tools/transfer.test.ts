@@ -7,11 +7,11 @@ describe("transfer tools", () => {
     vi.restoreAllMocks();
   });
 
-  it("uses mmd-cli to render Mermaid png during upload preview", async () => {
+  it("uses beautiful-mermaid-cli to render Mermaid png during upload preview", async () => {
     const execFileSync = vi.fn();
     const writeFileSync = vi.fn();
     const mkdirSync = vi.fn();
-    const existsSync = vi.fn((filePath: string) => filePath.includes("mmd-cli"));
+    const existsSync = vi.fn((filePath: string) => filePath.endsWith("/bm"));
     const readFileSync = vi.fn((filePath: string) => {
       if (filePath === "/tmp/demo.md") {
         return "# Demo\n\n```mermaid\ngraph TD\n  A-->B\n```\n";
@@ -41,8 +41,8 @@ describe("transfer tools", () => {
     expect(output.payload.generatedFiles).toHaveLength(1);
     expect(writeFileSync).toHaveBeenCalledWith("/tmp/confluence-cli/Demo-mermaid-1.mmd", "graph TD\n  A-->B", "utf8");
     expect(execFileSync).toHaveBeenCalledWith(
-      expect.stringContaining("mmd-cli"),
-      ["-i", "/tmp/confluence-cli/Demo-mermaid-1.mmd", "-o", "/tmp/confluence-cli/Demo-mermaid-1.png", "-b", "transparent", "-s", "3"],
+      expect.stringContaining("bm"),
+      ["render", "/tmp/confluence-cli/Demo-mermaid-1.mmd", "-o", "/tmp/confluence-cli/Demo-mermaid-1.png", "--json", "--scale", "3"],
       { stdio: "pipe" },
     );
   });

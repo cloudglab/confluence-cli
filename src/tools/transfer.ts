@@ -435,28 +435,29 @@ function createMermaidFile(mermaidSource: string, pageTitle: string, sourceFile:
 function renderMermaidFile(mermaidSource: string, outputFile: string, renderKind: MermaidRenderKind): void {
   const inputFile = join(dirname(outputFile), `${basename(outputFile, extname(outputFile))}.mmd`);
   writeFileSync(inputFile, mermaidSource, "utf8");
-  const mmdCli = resolveMmdCliBin();
-  const args = ["-i", inputFile, "-o", outputFile, "-b", "transparent"];
+  const renderer = resolveBeautifulMermaidBin();
+  const args = ["render", inputFile, "-o", outputFile, "--json"];
   if (renderKind === "png") {
-    args.push("-s", "3");
+    args.push("--scale", "3");
   }
   try {
-    execFileSync(mmdCli, args, { stdio: "pipe" });
+    execFileSync(renderer, args, { stdio: "pipe" });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to render Mermaid as ${renderKind} with mmd-cli: ${message}`);
+    throw new Error(`Failed to render Mermaid as ${renderKind} with beautiful-mermaid-cli: ${message}`);
   }
 }
 
-function resolveMmdCliBin(): string {
-  const extension = process.platform === "win32" ? ".exe" : "";
+function resolveBeautifulMermaidBin(): string {
+  const extension = process.platform === "win32" ? ".cmd" : "";
   const candidates = [
-    join(process.env.HOME ?? "", ".local", "bin", `mmd-cli${extension}`),
-    "/usr/local/bin/mmd-cli",
+    join(process.env.HOME ?? "", ".npm-global", "bin", `bm${extension}`),
+    join(process.env.HOME ?? "", ".local", "bin", `bm${extension}`),
+    `/usr/local/bin/bm${extension}`,
   ];
   const found = candidates.find((candidate) => existsSync(candidate));
   if (found) return found;
-  return `mmd-cli${extension}`;
+  return `bm${extension}`;
 }
 
 function safeFileName(value: string): string {
