@@ -81,7 +81,7 @@ function printSuccessGuide(action: "安装" | "更新", status: string): void {
 常用配置：
   confluence update                       更新 CLI 和 Skill
   confluence install --skip-config-check  仅安装，跳过配置校验
-  confluence install --skill-global       把 skill 装到 user-level 全局目录
+  confluence install --skill-global false 把 skill 改为装到当前项目目录
   bm doctor --json                       检查 Mermaid 渲染器
   CONFLUENCE_DISABLE_WRITE=true           禁用真实写操作
 
@@ -92,7 +92,7 @@ function printSuccessGuide(action: "安装" | "更新", status: string): void {
 function parseInstallOptions(args: string[]): InstallOptions {
   let skillSource: SkillSource = "local";
   let skillLocalPath: string | undefined;
-  let skillGlobal = false;
+  let skillGlobal = true;
   let skipConfigCheck = false;
   let cliOnly = false;
   let skillOnly = false;
@@ -213,10 +213,9 @@ function shouldRemoveConfig(options: UninstallOptions): boolean {
   return !options.keepConfig && !options.cliOnly && !options.skillOnly;
 }
 
-function createSkillAddArgs(source: string, global = false): string[] {
-  // 默认走 vercel-labs/skills 推荐的项目级（cwd 下 agent skills 目录），
-  // 兼容所有 agent（包括不支持 --global 的，如 PromptScript）。
-  // 用户明确需要 user-level 全局时再通过 --skill-global 显式开启。
+function createSkillAddArgs(source: string, global = true): string[] {
+  // 默认对齐 zentao-cli，优先安装到 user-level 全局目录。
+  // 如需改为当前项目目录，可显式传 --skill-global false。
   return ["-y", "skills", "add", source, ...(global ? ["--global"] : []), "--yes"];
 }
 
@@ -506,13 +505,12 @@ function createInstallEnv(): NodeJS.ProcessEnv {
 }
 
 function renderBanner(): string {
-  return [
-    "   ___       ___       ___       ___       ___       ___       ___       ___       ___       ___   ",
-    "  /\\  \\     /\\  \\     /\\__\\     /\\  \\     /\\__\\     /\\__\\     /\\  \\     /\\__\\     /\\  \\     /\\  \\  ",
-    " /::\\  \\   /::\\  \\   /:| _|_   /::\\  \\   /:/  /    /:/ _/_   /::\\  \\   /:| _|_   /::\\  \\   /::\\  \\ ",
-    "/:/\\:\\__\\ /:/\\:\\__\\ /::|/\\__\\ /::\\:\\__\\ /:/__/    /:/_/\\__\\ /::\\:\\__\\ /::|/\\__\\ /:/\\:\\__\\ /::\\:\\__\\",
-    "\\:\\ \/__/ \\:\\/:/  / \\/|::/  / \\/\\:\\/__/ \\:\\  \\    \\:\\/:/  / \\:\\:\\/  / \\/|::/  / \\:\\ \/__/ \\:\\:\\/  /",
-    " \\:\\__\\    \\::/  /    |:/  /     \/__/   \\:\\__\\    \\::/  /   \\:\\/  /    |:/  /   \\:\\__\\    \\:\\/  / ",
-    "  \/__/     \/__/     \/__/               \/__/     \/__/     \/__/     \/__/     \/__/     \/__/ ",
-  ].join("\n");
+  return String.raw`   ___       ___       ___       ___       ___       ___       ___       ___       ___       ___
+  /\  \     /\  \     /\__\     /\  \     /\__\     /\__\     /\  \     /\__\     /\  \     /\  \
+ /::\  \   /::\  \   /:| _|_   /::\  \   /:/  /    /:/ _/_   /::\  \   /:| _|_   /::\  \   /::\  \
+/:/\:\__\ /:/\:\__\ /::|/\__\ /::\:\__\ /:/__/    /:/_/\__\ /::\:\__\ /::|/\__\ /:/\:\__\ /::\:\__\
+\:\ /__/ \:\/:/  / /|::/  / /\:\/__/ \:\  \    \:\/:/  / \:\:\/  / /|::/  / \:\ /__/ \:\:\/  /
+ \:\__\    \::/  /    |:/  /     /__/   \:\__\    \::/  /   \:\/  /    |:/  /   \:\__\    \:\/  /
+  /__/     /__/     /__/               /__/     /__/     /__/     /__/     /__/     /__/
+`;
 }

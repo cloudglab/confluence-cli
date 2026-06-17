@@ -63,7 +63,7 @@ describe("runCli", () => {
     await runCli(["help"]);
 
     const output = String(write.mock.calls.at(-1)?.[0] ?? "");
-    expect(output).toContain("confluence CLI 0.0.6");
+    expect(output).toContain("confluence CLI 0.0.7");
     expect(output).toContain("运行要求：Node.js >= 20");
     expect(output).toContain("confluence [--role full|reader|writer] <command> [--key value]");
     expect(output).toContain("confluence whoami");

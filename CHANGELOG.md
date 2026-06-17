@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 0.0.7 - 2026-06-17
+
+### 修复
+
+- `install` / `update` 默认重新改回把 Confluence skill 安装到 user-level 全局目录，对齐 `zentao-cli`；如需改回当前项目目录，可显式传 `--skill-global false`。
+- 安装成功提示中的 ASCII banner 调整为固定多行模板，减少终端里因行宽不一致造成的视觉偏移。
+
+### 测试
+
+- `tests/install.test.ts` 同步默认全局安装、npm 包回退安装，以及 `--skill-global false` 切回项目级安装的断言。
+
 ## 0.0.6 - 2026-06-17
 
 ### 变更

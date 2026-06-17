@@ -43,7 +43,7 @@ confluence-reader list
 confluence-writer list
 ```
 
-> `install` / `update` 默认走 `vercel-labs/skills` 推荐的项目级安装（`cwd` 下 agent skills 目录，兼容所有 agent，包括不支持全局的 PromptScript）。需要 user-level 全局时显式传 `--skill-global`（仅当 agent 支持，如 Claude Code / Cursor / OpenCode）。`confluence uninstall --confirm true` 会同时清理项目级与全局级残留。
+> `install` / `update` 默认会把 Confluence skill 安装到 user-level 全局目录，行为对齐 `zentao-cli`。如需改回当前项目目录，可显式传 `--skill-global false`。`confluence uninstall --confirm true` 会同时清理项目级与全局级残留。
 
 卸载入口（默认仅打印卸载计划，真实执行需显式确认）：
 
