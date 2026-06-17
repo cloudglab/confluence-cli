@@ -48,6 +48,12 @@ function mockInstallDependencies() {
   }));
 }
 
+function createSpawnPlan(entries: Array<{ command: string; args: string[]; code?: number; stdout?: string; stderr?: string }>) {
+  return new Map(entries.map((entry) => [`${entry.command} ${entry.args.join(" ")}`, entry]));
+}
+
+type SpawnPlanEntry = { command: string; args: string[]; code?: number; stdout?: string; stderr?: string };
+
 describe("install command", () => {
   afterEach(() => {
     commandCalls.length = 0;
@@ -73,6 +79,79 @@ describe("install command", () => {
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("安装完成，已跳过 Confluence 配置校验。"));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("   ___       ___"));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("快速开始："));
+  });
+
+  it("本地 skill 缺失时自动回退到 npm 包解压安装，mmd-cli 失败不阻断安装", async () => {
+    const plan = createSpawnPlan([
+      { command: "npm", args: ["root", "-g"], stdout: "/usr/local/lib/node_modules\n" },
+      { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
+      { command: "sh", args: ["-c", "curl -fsSL https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh | sh"], code: 35, stderr: "curl: (35) LibreSSL SSL_connect: SSL_ERROR_SYSCALL in connection to raw.githubusercontent.com:443\n" },
+      { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"], stdout: "cloudglab-confluence-cli-0.1.0.tgz\n" },
+      { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
+      { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--yes"] },
+    ]);
+
+    vi.doMock("node:child_process", () => ({
+      spawn: vi.fn((command: string, args: string[]) => {
+        commandCalls.push({ command, args });
+        const child = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter };
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        (child.stdout as EventEmitter & { pipe: ReturnType<typeof vi.fn> }).pipe = vi.fn();
+
+        queueMicrotask(() => {
+          const key = `${command} ${args.join(" ")}`;
+          const hit: Partial<SpawnPlanEntry> = plan.get(key) ?? { code: 0 };
+          if (hit.stdout) child.stdout.emit("data", Buffer.from(hit.stdout));
+          if (hit.stderr) child.stderr.emit("data", Buffer.from(hit.stderr));
+          child.emit("close", hit.code ?? 0);
+        });
+
+        return child;
+      }),
+    }));
+    vi.doMock("node:fs/promises", () => ({
+      access: vi.fn(async (filePath: string) => {
+        if (filePath.includes("skills/confluence-cli")) {
+          throw new Error("missing skill");
+        }
+      }),
+      mkdtemp: vi.fn(async () => "/tmp/confluence-cli-skill-abc"),
+      rm: vi.fn(async () => undefined),
+      readdir: vi.fn(async () => []),
+    }));
+    vi.doMock("node:os", () => ({ default: { tmpdir: () => "/tmp", homedir: () => homedir() } }));
+    vi.doMock("../src/api/index.js", () => ({
+      ConfluenceApi: class {
+        getCurrentUser = vi.fn(async () => ({ username: "me" }));
+      },
+    }));
+    vi.doMock("../src/core/config.js", () => ({
+      loadConfluenceConfig: vi.fn(() => ({ url: "https://confluence.example.com", apiBaseUrl: "https://confluence.example.com/rest/api", authType: "pat", personalToken: "secret", source: "~/.confluence/config.json" })),
+      normalizeConfig: vi.fn((config: unknown) => config),
+      saveConfig: vi.fn(),
+    }));
+    vi.doMock("../src/update-probe.js", () => ({
+      writeUpdateCacheAfterInstall: vi.fn(async () => undefined),
+    }));
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const { runInstallCommand } = await import("../src/install.js");
+
+    await runInstallCommand(["--skip-config-check"]);
+
+    expect(commandCalls).toEqual([
+      { command: "npm", args: ["root", "-g"] },
+      { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
+      { command: "sh", args: ["-c", "curl -fsSL https://raw.githubusercontent.com/coolamit/mermaid-cli/master/install.sh | sh"] },
+      { command: "npm", args: ["root", "-g"] },
+      { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"] },
+      { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
+      { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--yes"] },
+    ]);
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("已跳过 mmd-cli 安装："));
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("正在自动回退到 npm 包解压安装"));
+    expect(stderr).toHaveBeenCalled();
   });
 
   it("支持 npm skill 来源、本地 skill 路径和布尔参数", async () => {

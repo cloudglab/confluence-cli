@@ -25,6 +25,11 @@ pnpm release:smoke-query --dry-run
 
 `mmd-cli` 运行时仍需要系统已有 Chrome/Chromium；如果机器完全没有浏览器，可在上传时传 `--mermaid none`，保留 Mermaid 代码块。
 
+从 `0.0.5` 起，`install` / `update` 在以下两种情况会**继续完成安装**而不是中断：
+
+- `mmd-cli` 官方安装脚本因网络问题失败时，会打印 `已跳过 mmd-cli 安装：<原因>` 与 `后续如需 Mermaid 图片渲染，可稍后重试安装，或在上传时传 --mermaid none 保留代码块。`。
+- 全局包内 `skills/confluence-cli` 缺失时，会打印 `未找到已安装包内的 Confluence skill：<path>，正在自动回退到 npm 包解压安装...` 并自动用 `npm pack` + `tar` + `npx -y skills add` 完成 skill 安装，无需手动切换 `--skill-source npm`。
+
 安装/更新入口：
 
 ```bash

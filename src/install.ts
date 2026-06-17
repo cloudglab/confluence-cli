@@ -301,7 +301,13 @@ async function installGlobalCli(action: "安装" | "更新"): Promise<void> {
 }
 
 async function installMmdCli(action: "安装" | "更新"): Promise<void> {
-  await runStep(`${action} Mermaid 原生渲染器 mmd-cli`, "sh", ["-c", `curl -fsSL ${MMD_CLI_INSTALL_URL} | sh`]);
+  try {
+    await runStep(`${action} Mermaid 原生渲染器 mmd-cli`, "sh", ["-c", `curl -fsSL ${MMD_CLI_INSTALL_URL} | sh`]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stdout.write(`已跳过 mmd-cli 安装：${message}\n`);
+    process.stdout.write("后续如需 Mermaid 图片渲染，可稍后重试安装，或在上传时传 --mermaid none 保留代码块。\n");
+  }
 }
 
 function isNpmDirectoryNotEmptyError(error: unknown): boolean {
@@ -346,7 +352,9 @@ async function installSkillFromInstalledPackage(action: "安装" | "更新", ski
   try {
     await access(skillPath);
   } catch {
-    throw new Error(`未找到已安装包内的 Confluence skill：${skillPath}。可重试 --skill-source npm 或 --skill-source git。`);
+    process.stdout.write(`未找到已安装包内的 Confluence skill：${skillPath}，正在自动回退到 npm 包解压安装...\n`);
+    await installSkillFromNpmPackage(action, skillGlobal);
+    return;
   }
   await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(skillPath, skillGlobal));
 }

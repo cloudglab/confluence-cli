@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.0.5 - 2026-06-17
+
+### 修复
+
+- `install` / `update` 链路：把仓库内 `skills/confluence-cli` 从指向 `.agents/skills/confluence-cli` 的符号链接替换为真实目录副本，避免 npm tarball 中 `skills/confluence-cli` 路径在用户机器上不可用导致“未找到已安装包内的 Confluence skill”错误。
+- `install` / `update` 链路：`installMmdCli` 不再因 `curl -fsSL ... | sh` 网络失败而中断整个安装，改为捕获异常并输出 `已跳过 mmd-cli 安装：<原因>` 与后续 `--mermaid none` 退路提示。
+- `install` / `update` 链路：`installSkillFromInstalledPackage` 在 `access` 失败时不再直接抛错，自动回退到 `installSkillFromNpmPackage`（`npm pack` + `tar -xzf` + `npx -y skills add`），覆盖包内 skill 缺失场景。
+
+### 测试
+
+- `tests/install.test.ts` 新增回归用例 `本地 skill 缺失时自动回退到 npm 包解压安装，mmd-cli 失败不阻断安装`：mock `curl` 退出码 35、stderr 含 `curl: (35) LibreSSL SSL_connect...`，断言安装链路按 `npm install -g` → 跳过 `mmd-cli` → `npm pack` → `tar` → `npx -y skills add` 顺序完成，并校验 stdout 中包含“已跳过 mmd-cli 安装”与“正在自动回退到 npm 包解压安装”两行提示。
+
+### 说明
+
+- 本次热修不改变 `mmd-cli` 运行时仍需系统 Chrome/Chromium 的前提；网络环境下无法自动安装 `mmd-cli` 时，建议用户改用 `--mermaid none` 保留代码块。
+- 验证结果：`pnpm test -- tests/install.test.ts tests/skill.test.ts tests/tools/transfer.test.ts` 全部通过（3 个文件、10 个测试）。
+
 ## 0.0.4 - 2026-06-17
 
 ### 修复
