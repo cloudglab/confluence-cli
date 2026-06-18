@@ -8,7 +8,7 @@ import type { CliRegistry } from "../core/cli-registry.js";
 import { loadConfluenceConfig } from "../core/config.js";
 import { previewOrAssertWriteAllowed } from "../core/write-guard.js";
 import type { ConfluenceConfig } from "../types/common.js";
-import { markdownToStorage, markdownToWiki, parseMarkdown, postProcessStorageHtml } from "../utils/markdown.js";
+import { markdownToStorage, parseMarkdown, postProcessStorageHtml } from "../utils/markdown.js";
 import { jsonResult } from "../utils/result.js";
 
 export function registerTransferTools(registry: CliRegistry): void {
@@ -20,7 +20,7 @@ export function registerTransferTools(registry: CliRegistry): void {
       space: z.string().optional(),
       title: z.string().optional(),
       parentId: z.coerce.string().optional(),
-      representation: z.enum(["wiki", "storage"]).default("wiki"),
+      representation: z.enum(["storage"]).default("storage"),
       attachments: z.array(z.string()).optional(),
       mermaid: z.enum(["png", "svg", "none"]).default("png"),
       forceReupload: z.boolean().default(false),
@@ -29,7 +29,7 @@ export function registerTransferTools(registry: CliRegistry): void {
       tocMaxLevel: z.coerce.number().min(1).max(7).optional(),
     }),
     async (input) => {
-      const representation = input.representation ?? "wiki";
+      const representation = input.representation ?? "storage";
       const raw = readFileSync(input.file, "utf8");
       const parsed = parseMarkdown(raw, basename(input.file, extname(input.file)));
       const title = input.title ?? parsed.title;
@@ -145,9 +145,9 @@ interface GeneratedMermaidFile {
 type MermaidRenderKind = "png" | "svg";
 type MermaidMode = MermaidRenderKind | "none";
 
-function prepareMarkdownForUpload(markdown: string, pageTitle: string, sourceFile: string, representation: "wiki" | "storage", mermaidMode: MermaidMode): { body: string; generatedFiles: GeneratedMermaidFile[] } {
+function prepareMarkdownForUpload(markdown: string, pageTitle: string, sourceFile: string, _representation: "storage", mermaidMode: MermaidMode): { body: string; generatedFiles: GeneratedMermaidFile[] } {
   const prepared = replaceMermaidFences(markdown, pageTitle, sourceFile, mermaidMode);
-  const body = prepared.generatedFiles.length > 0 || representation === "storage" ? markdownToStorage(prepared.markdown) : markdownToWiki(prepared.markdown);
+  const body = markdownToStorage(prepared.markdown);
   return { body, generatedFiles: prepared.generatedFiles };
 }
 
@@ -433,6 +433,11 @@ function createMermaidFile(mermaidSource: string, pageTitle: string, sourceFile:
 }
 
 function renderMermaidFile(mermaidSource: string, outputFile: string, renderKind: MermaidRenderKind): void {
+  if (/^%%\{init:/m.test(mermaidSource)) {
+    throw new Error(
+      "Failed to render Mermaid with beautiful-mermaid-cli: detected %%{init:...}%% header. 当前内置渲染器不支持该主题配置；请先用 mmdc 单独渲染成图片后在 Markdown/HTML 中引用，或去掉 init 头。",
+    );
+  }
   const inputFile = join(dirname(outputFile), `${basename(outputFile, extname(outputFile))}.mmd`);
   writeFileSync(inputFile, mermaidSource, "utf8");
   const renderer = resolveBeautifulMermaidBin();

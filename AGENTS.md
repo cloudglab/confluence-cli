@@ -32,3 +32,9 @@
 - `CONFLUENCE_PAT` 或 `CONFLUENCE_PERSONAL_TOKEN`（Confluence 7.13.7 推荐，Bearer）
 - `CONFLUENCE_USERNAME` + `CONFLUENCE_PASSWORD` 或 `CONFLUENCE_API_TOKEN`（Basic 兼容）
 - `CONFLUENCE_DISABLE_WRITE=true` 可禁用所有真实写操作，即使传了 `confirm=true` 也只返回预览/诊断。
+
+## Cloned Dependency Source
+
+Read-only dependency source repositories are available under `.slim/clonedeps/repos/` for inspection. Do not edit these clones.
+
+- `.slim/clonedeps/repos/pilat__markfluence/` — `pilat/markfluence` at `v0.3.1`; 用来借鉴其 Markdown AST 到 Confluence storage XHTML 的元素级转换设计。

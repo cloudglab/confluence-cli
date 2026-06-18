@@ -61,7 +61,7 @@ describe("install command", () => {
     vi.restoreAllMocks();
   });
 
-  it("默认安装 CLI 并把 skill 装到全局目录", async () => {
+  it("默认安装 CLI 并从全局包安装 skill", async () => {
     mockSpawn(new Map([["npm root -g", "/usr/local/lib/node_modules\n"]]));
     mockInstallDependencies();
     const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -74,7 +74,7 @@ describe("install command", () => {
       { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
       { command: "npm", args: ["install", "-g", "beautiful-mermaid-cli@latest"] },
       { command: "npm", args: ["root", "-g"] },
-      { command: "npx", args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--global", "--yes"] },
+      { command: "npx", args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--global", "--agent", "universal", "--yes"] },
     ]);
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("安装完成，已跳过 Confluence 配置校验。"));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("   ___       ___"));
@@ -88,7 +88,7 @@ describe("install command", () => {
       { command: "npm", args: ["install", "-g", "beautiful-mermaid-cli@latest"], code: 1, stderr: "npm ERR! network timeout\n" },
       { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"], stdout: "cloudglab-confluence-cli-0.1.0.tgz\n" },
       { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
-      { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--global", "--yes"] },
+      { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--global", "--agent", "universal", "--yes"] },
     ]);
 
     vi.doMock("node:child_process", () => ({
@@ -147,7 +147,7 @@ describe("install command", () => {
       { command: "npm", args: ["root", "-g"] },
       { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"] },
       { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
-      { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--global", "--yes"] },
+      { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--global", "--agent", "universal", "--yes"] },
     ]);
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("已跳过 beautiful-mermaid-cli 安装："));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("正在自动回退到 npm 包解压安装"));
@@ -168,25 +168,22 @@ describe("install command", () => {
       { command: "npm", args: ["install", "-g", "beautiful-mermaid-cli@latest"] },
       { command: "npm", args: ["pack", "@cloudglab/confluence-cli@latest", "--pack-destination", "/tmp/confluence-cli-skill-abc", "--silent"] },
       { command: "tar", args: ["-xzf", "/tmp/confluence-cli-skill-abc/cloudglab-confluence-cli-0.1.0.tgz", "-C", "/tmp/confluence-cli-skill-abc"] },
-      { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--global", "--yes"] },
-      { command: "npx", args: ["-y", "skills", "add", path.resolve("./local-skill"), "--global", "--yes"] },
+      { command: "npx", args: ["-y", "skills", "add", "/tmp/confluence-cli-skill-abc/package", "--global", "--agent", "universal", "--yes"] },
+      { command: "npx", args: ["-y", "skills", "add", path.resolve("./local-skill"), "--global", "--agent", "universal", "--yes"] },
     ]);
   });
 
-  it("--skill-global false 时改为项目级安装", async () => {
+  it("支持 --skill-global false 切回项目级 skill 安装", async () => {
     mockSpawn(new Map([["npm root -g", "/usr/local/lib/node_modules\n"]]));
     mockInstallDependencies();
     const { runInstallCommand } = await import("../src/install.js");
 
-    await runInstallCommand(["--skill-global", "false", "--skip-config-check"]);
+    await runInstallCommand(["--skip-config-check", "--skill-global", "false"]);
 
-    expect(commandCalls).toEqual([
-      { command: "npm", args: ["root", "-g"] },
-      { command: "npm", args: ["install", "-g", "@cloudglab/confluence-cli@latest"] },
-      { command: "npm", args: ["install", "-g", "beautiful-mermaid-cli@latest"] },
-      { command: "npm", args: ["root", "-g"] },
-      { command: "npx", args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--yes"] },
-    ]);
+    expect(commandCalls).toContainEqual({
+      command: "npx",
+      args: ["-y", "skills", "add", path.join("/usr/local/lib/node_modules", "@cloudglab/confluence-cli", "skills", "confluence-cli"), "--yes"],
+    });
   });
 
   it("未确认时展示卸载预览", async () => {

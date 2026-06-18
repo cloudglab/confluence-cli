@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "updatedAt": "2026-06-17T00:00:00.000Z",
+  "dependencies": [
+    {
+      "name": "markfluence",
+      "resolvedVersion": "0.3.1",
+      "repoUrl": "https://github.com/pilat/markfluence.git",
+      "ref": "v0.3.1",
+      "path": ".slim/clonedeps/repos/pilat__markfluence",
+      "packagePath": "src",
+      "reason": "借鉴其 Markdown AST 到 Confluence storage XHTML 的转换层，内化到当前 confluence-cli。"
+    }
+  ]
+}

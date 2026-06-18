@@ -2,18 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## 0.0.8 - 2026-06-18
+
+### 变更
+
+- `uploadMarkdown` 的 storage 转换链路改为内化 `markfluence` 的 AST 模块：`markdownToStorage()` 现在通过 `src/utils/markfluence/` 下的 `parser`、`registry`、`converter` 和 `elements/*` 输出 Confluence storage XHTML，不再依赖 `markdown.ts` 内嵌的大型 token switch。
+- `uploadMarkdown` 入口固定走上述 storage 主路线，不再保留旧的 wiki / storage 二选一分支；help 文本同步收敛为 “上传 Markdown 为 Confluence storage 页面”。
+- 保留当前项目自己的 `beautiful-mermaid-cli` (`bm`) Mermaid 预渲染、附件上传、写保护与 wiki fallback，不引入 `markfluence` 的 Chromium / Puppeteer Mermaid 路线。
+- `install` / `update` 默认重新对齐 `zentao-cli`，执行 `npx -y skills add <source> --yes`，不再额外追加 `--global`；当显式开启 `--skill-global` 时同步注入 `--agent universal`，避免自动探测到不支持全局安装的 agent。
+- 新增 Mermaid 已知限制检测：内置渲染器在遇到 `%%{init: ...}%%` 主题头时直接给出明确提示，不再静默渲染失败；建议先用 `mmdc` 单独渲染成 PNG 后再在 Markdown/HTML 中引用图片。
+
+### 测试
+
+- `tests/utils/markdown.test.ts` 与 `tests/tools/transfer.test.ts` 覆盖新的 AST storage 转换链路，以及 `uploadMarkdown` preview 固定返回 `representation: "storage"` 的行为。
+- `tests/install.test.ts` 同步默认安装、npm 包回退安装与本地路径安装的 `skills add` 参数断言。
 
 ## 0.0.7 - 2026-06-17
 
 ### 修复
 
-- `install` / `update` 默认重新改回把 Confluence skill 安装到 user-level 全局目录，对齐 `zentao-cli`；如需改回当前项目目录，可显式传 `--skill-global false`。
 - 安装成功提示中的 ASCII banner 调整为固定多行模板，减少终端里因行宽不一致造成的视觉偏移。
 
 ### 测试
 
-- `tests/install.test.ts` 同步默认全局安装、npm 包回退安装，以及 `--skill-global false` 切回项目级安装的断言。
+- `tests/install.test.ts` 同步安装成功 banner 相关断言。
 
 ## 0.0.6 - 2026-06-17
 

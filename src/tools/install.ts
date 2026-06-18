@@ -6,7 +6,7 @@ import { jsonResult } from "../utils/result.js";
 const installSchema = z.object({
   "skill-source": z.enum(["local", "git", "npm"]).optional().default("local").describe("技能来源"),
   "skill-local-path": z.string().optional().describe("本地 skill 目录"),
-  "skill-global": z.boolean().optional().default(false).describe("将 skill 装到 user-level 全局目录（需 agent 支持）"),
+  "skill-global": z.boolean().optional().default(true).describe("将 skill 装到 user-level 全局目录；默认使用 universal agent 避开自动探测"),
   "skip-config-check": z.boolean().optional().default(false).describe("跳过配置校验"),
   "cli-only": z.boolean().optional().default(false).describe("只安装 CLI"),
   "skill-only": z.boolean().optional().default(false).describe("只安装 skill"),

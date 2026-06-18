@@ -10,3 +10,7 @@ coverage/
 .cursor/
 .baoyu-skills/
 skills-lock.json
+
+# BEGIN oh-my-opencode-slim clonedeps
+.slim/clonedeps/repos/
+# END oh-my-opencode-slim clonedeps

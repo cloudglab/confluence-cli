@@ -1,4 +1,6 @@
-import { marked } from "marked";
+import { convert as convertMarkfluenceNode } from "./markfluence/converter.js";
+import { parse as parseMarkfluenceDocument } from "./markfluence/parser.js";
+import { postProcessStorageHtml as postProcessStorageHtmlInternal } from "./markfluence/utils.js";
 
 export interface ParsedMarkdown {
   frontmatter: Record<string, unknown>;
@@ -54,8 +56,21 @@ export function markdownToWiki(markdown: string): string {
 }
 
 export function markdownToStorage(markdown: string): string {
-  const html = marked.parse(markdown, { gfm: true, breaks: false }) as string;
-  return postProcessStorageHtml(html);
+  const normalized = normalizeMarkdownForConfluence(markdown);
+  const parsed = parseMarkfluenceDocument(normalized);
+  return convertMarkfluenceNode(parsed.ast, {
+    config: { mermaid: true, verbose: false },
+    frontmatter: parsed.frontmatter,
+    attachments: new Map(),
+  });
+}
+
+export function normalizeMarkdownForConfluence(markdown: string): string {
+  return escapeCurlyBracesOutsideCode(removeDuplicateMarkdownTableHeaders(markdown));
+}
+
+export function postProcessStorageHtml(html: string): string {
+  return postProcessStorageHtmlInternal(html);
 }
 
 function convertLine(line: string): string {
@@ -132,117 +147,52 @@ function isMarkdownTableSeparator(line: string): boolean {
   return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+function removeDuplicateMarkdownTableHeaders(markdown: string): string {
+  const lines = markdown.split(/\r?\n/);
+  const output: string[] = [];
+  let inFence = false;
 
-export function postProcessStorageHtml(html: string): string {
-  return html
-    .replace(/<pre><code(?: class="language-([^"]+)")?>([\s\S]*?)<\/code><\/pre>/g, (_match, language: string | undefined, code: string) => buildCodeMacro(language, decodeHtml(code)))
-    .replace(/<ul>\s*((?:<li><input(?: checked="")? disabled="" type="checkbox">\s*[\s\S]*?<\/li>\s*)+)\s*<\/ul>/g, (_match, items: string) => buildTaskList(items))
-    .replace(/<img\s+([^>]*?)\s*\/?>(?!<\/img>)/g, (_match, attrs: string) => buildImageMacro(attrs))
-    .replace(/<hr>/g, "<hr />")
-    .replace(/<p>\s*<\/p>/g, "")
-    .replace(/<p>(MERMAID_DRAWIO_PLACEHOLDER_\d+)<\/p>/g, "<p>$1</p>");
-}
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (/^```/.test(line.trim())) {
+      inFence = !inFence;
+      output.push(line);
+      continue;
+    }
 
-function buildCodeMacro(language: string | undefined, code: string): string {
-  const lang = normalizeCodeMacroLanguage(language);
-  const params = ["<ac:structured-macro ac:name=\"code\" ac:schema-version=\"1\" data-layout=\"default\">"];
-  if (lang) params.push(`<ac:parameter ac:name=\"language\">${escapeXml(lang)}</ac:parameter>`);
-  params.push(`<ac:plain-text-body><![CDATA[${code}]]></ac:plain-text-body>`);
-  params.push("</ac:structured-macro>");
-  return params.join("");
-}
+    if (!inFence) {
+      const nextLine = lines[index + 1] ?? "";
+      if (isDuplicateMarkdownTableHeader(line, nextLine)) continue;
+    }
 
-function normalizeCodeMacroLanguage(language: string | undefined): string | undefined {
-  const value = language?.trim().toLowerCase();
-  if (!value) return undefined;
-
-  const aliases: Record<string, string> = {
-    js: "js",
-    jsx: "js",
-    ts: "js",
-    tsx: "js",
-    shell: "bash",
-    sh: "bash",
-    zsh: "bash",
-    yml: "yml",
-    yaml: "yml",
-    xml: "xml",
-    html: "xml",
-    md: "text",
-    markdown: "text",
-    json: "text",
-    jsonc: "text",
-    csharp: "c#",
-    python: "py",
-  };
-
-  const normalized = aliases[value] ?? value;
-  const supported = new Set([
-    "actionscript3",
-    "applescript",
-    "bash",
-    "c",
-    "c#",
-    "coldfusion",
-    "cpp",
-    "css",
-    "delphi",
-    "diff",
-    "erl",
-    "groovy",
-    "java",
-    "jfx",
-    "js",
-    "perl",
-    "php",
-    "powershell",
-    "py",
-    "ruby",
-    "sass",
-    "scala",
-    "sql",
-    "text",
-    "vb",
-    "xml",
-    "yml",
-  ]);
-
-  return supported.has(normalized) ? normalized : undefined;
-}
-
-function buildTaskList(items: string): string {
-  const taskItems: string[] = [];
-  const itemRegex = /<li><input(?: checked="")? disabled="" type="checkbox">\s*([\s\S]*?)<\/li>/g;
-  let match = itemRegex.exec(items);
-  while (match) {
-    const complete = /checked=""/i.test(match[0]);
-    taskItems.push(
-      `<ac:task><ac:task-status>${complete ? "complete" : "incomplete"}</ac:task-status><ac:task-body>${match[1]}</ac:task-body></ac:task>`,
-    );
-    match = itemRegex.exec(items);
+    output.push(line);
   }
-  return taskItems.length > 0 ? `<ac:task-list>${taskItems.join("")}</ac:task-list>` : `<ul>${items}</ul>`;
+
+  return output.join("\n");
 }
 
-function buildImageMacro(attrs: string): string {
-  const src = attrs.match(/src="([^"]+)"/i)?.[1];
-  const alt = attrs.match(/alt="([^"]*)"/i)?.[1] ?? "";
-  if (!src) return `<img ${attrs} />`;
-  return `<ac:image>${src.startsWith("http") ? `<ri:url ri:value="${escapeXml(src)}" />` : `<ri:attachment ri:filename="${escapeXml(src)}" />`}${alt ? `<ac:parameter ac:name="alt">${escapeXml(alt)}</ac:parameter>` : ""}</ac:image>`;
+function isDuplicateMarkdownTableHeader(line: string, nextLine: string): boolean {
+  const current = line.trim();
+  const next = nextLine.trim();
+  if (!current || current !== next) return false;
+  if (!current.startsWith("|") || !current.endsWith("|")) return false;
+  return !isMarkdownTableSeparator(next);
 }
 
-function decodeHtml(value: string): string {
-  return value
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
+function escapeCurlyBracesOutsideCode(markdown: string): string {
+  const lines = markdown.split(/\r?\n/);
+  const output: string[] = [];
+  let inFence = false;
 
-function escapeXml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
+  for (const line of lines) {
+    if (/^```/.test(line.trim())) {
+      inFence = !inFence;
+      output.push(line);
+      continue;
+    }
+
+    output.push(inFence ? line : line.replace(/(?<!\\)\{([^{}\n]+)\}/g, "\\{$1\\}"));
+  }
+
+  return output.join("\n");
 }

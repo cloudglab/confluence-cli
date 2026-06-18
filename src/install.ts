@@ -9,16 +9,17 @@ import { writeUpdateCacheAfterInstall } from "./update-probe.js";
 const PACKAGE_NAME = "@cloudglab/confluence-cli";
 const GIT_SKILL_SOURCE = "cloudglab/confluence-cli";
 const MERMAID_RENDERER_PACKAGE = "beautiful-mermaid-cli";
+const GLOBAL_SKILL_AGENT = "universal";
 
 type SkillSource = "local" | "git" | "npm";
 
 interface InstallOptions {
   skillSource: SkillSource;
   skillLocalPath?: string;
-  skillGlobal: boolean;
   skipConfigCheck: boolean;
   cliOnly: boolean;
   skillOnly: boolean;
+  skillGlobal: boolean;
 }
 
 interface UninstallOptions {
@@ -81,7 +82,6 @@ function printSuccessGuide(action: "安装" | "更新", status: string): void {
 常用配置：
   confluence update                       更新 CLI 和 Skill
   confluence install --skip-config-check  仅安装，跳过配置校验
-  confluence install --skill-global false 把 skill 改为装到当前项目目录
   bm doctor --json                       检查 Mermaid 渲染器
   CONFLUENCE_DISABLE_WRITE=true           禁用真实写操作
 
@@ -92,10 +92,10 @@ function printSuccessGuide(action: "安装" | "更新", status: string): void {
 function parseInstallOptions(args: string[]): InstallOptions {
   let skillSource: SkillSource = "local";
   let skillLocalPath: string | undefined;
-  let skillGlobal = true;
   let skipConfigCheck = false;
   let cliOnly = false;
   let skillOnly = false;
+  let skillGlobal = true;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -112,13 +112,6 @@ function parseInstallOptions(args: string[]): InstallOptions {
     if (arg === "--skill-local-path" || arg.startsWith("--skill-local-path=")) {
       skillLocalPath = readRequiredOptionValue(args, index, "--skill-local-path");
       if (arg === "--skill-local-path") index += 1;
-      continue;
-    }
-
-    if (arg === "--skill-global" || arg.startsWith("--skill-global=")) {
-      const parsed = readBooleanFlag(args, index, "--skill-global");
-      skillGlobal = parsed.value;
-      index += parsed.consumedArgs;
       continue;
     }
 
@@ -143,6 +136,13 @@ function parseInstallOptions(args: string[]): InstallOptions {
       continue;
     }
 
+    if (arg === "--skill-global" || arg.startsWith("--skill-global=")) {
+      const parsed = readBooleanFlag(args, index, "--skill-global");
+      skillGlobal = parsed.value;
+      index += parsed.consumedArgs;
+      continue;
+    }
+
     throw new Error(`未知安装参数: ${arg}`);
   }
 
@@ -150,7 +150,7 @@ function parseInstallOptions(args: string[]): InstallOptions {
     throw new Error("--cli-only 和 --skill-only 不能同时使用");
   }
 
-  return { skillSource, skillLocalPath, skillGlobal, skipConfigCheck, cliOnly, skillOnly };
+  return { skillSource, skillLocalPath, skipConfigCheck, cliOnly, skillOnly, skillGlobal };
 }
 
 function parseUninstallOptions(args: string[]): UninstallOptions {
@@ -214,9 +214,7 @@ function shouldRemoveConfig(options: UninstallOptions): boolean {
 }
 
 function createSkillAddArgs(source: string, global = true): string[] {
-  // 默认对齐 zentao-cli，优先安装到 user-level 全局目录。
-  // 如需改为当前项目目录，可显式传 --skill-global false。
-  return ["-y", "skills", "add", source, ...(global ? ["--global"] : []), "--yes"];
+  return ["-y", "skills", "add", source, ...(global ? ["--global", "--agent", GLOBAL_SKILL_AGENT] : []), "--yes"];
 }
 
 function createSkillRemoveArgs(global = false): string[] {
@@ -328,6 +326,10 @@ async function runNpxStepWithRetry(title: string, args: string[]): Promise<void>
 }
 
 async function installSkill(action: "安装" | "更新", options: InstallOptions): Promise<void> {
+  await installSkillBySource(action, options);
+}
+
+async function installSkillBySource(action: "安装" | "更新", options: InstallOptions): Promise<void> {
   if (options.skillLocalPath) {
     await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(path.resolve(options.skillLocalPath), options.skillGlobal));
     return;
@@ -346,16 +348,16 @@ async function installSkill(action: "安装" | "更新", options: InstallOptions
   await installSkillFromNpmPackage(action, options.skillGlobal);
 }
 
-async function installSkillFromInstalledPackage(action: "安装" | "更新", skillGlobal: boolean): Promise<void> {
+async function installSkillFromInstalledPackage(action: "安装" | "更新", global = true): Promise<void> {
   const skillPath = await getInstalledPackageSkillPath();
   try {
     await access(skillPath);
   } catch {
     process.stdout.write(`未找到已安装包内的 Confluence skill：${skillPath}，正在自动回退到 npm 包解压安装...\n`);
-    await installSkillFromNpmPackage(action, skillGlobal);
+    await installSkillFromNpmPackage(action, global);
     return;
   }
-  await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(skillPath, skillGlobal));
+  await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(skillPath, global));
 }
 
 async function getInstalledPackageSkillPath(): Promise<string> {
@@ -364,7 +366,7 @@ async function getInstalledPackageSkillPath(): Promise<string> {
   return path.join(globalNodeModules, PACKAGE_NAME, "skills", "confluence-cli");
 }
 
-async function installSkillFromNpmPackage(action: "安装" | "更新", skillGlobal: boolean): Promise<void> {
+async function installSkillFromNpmPackage(action: "安装" | "更新", global = true): Promise<void> {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "confluence-cli-skill-"));
   try {
     const stdout = await runCommandOutput("npm", ["pack", `${PACKAGE_NAME}@latest`, "--pack-destination", tempDir, "--silent"]);
@@ -372,7 +374,7 @@ async function installSkillFromNpmPackage(action: "安装" | "更新", skillGlob
     if (!tarballName) throw new Error("npm pack 没有返回包文件名");
 
     await runStep("解压 Confluence npm 包", "tar", ["-xzf", path.join(tempDir, tarballName), "-C", tempDir]);
-    await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(path.join(tempDir, "package"), skillGlobal));
+    await runNpxStepWithRetry(`${action} Confluence skill`, createSkillAddArgs(path.join(tempDir, "package"), global));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
