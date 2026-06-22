@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getApi } from "../core/api-provider.js";
 import type { CliRegistry } from "../core/cli-registry.js";
-import { jsonResult } from "../utils/result.js";
+import { jsonResult, listResult } from "../utils/result.js";
 
 export function registerSpaceTools(registry: CliRegistry): void {
   const getCurrentUser = async () => {
@@ -12,7 +12,17 @@ export function registerSpaceTools(registry: CliRegistry): void {
     "listSpaces",
     z.object({ limit: z.number().int().positive().max(100).default(25) }),
     async ({ limit }) => {
-      return jsonResult(await getApi().listSpaces(limit));
+      const effectiveLimit = limit ?? 25;
+      const data = await getApi().listSpaces(effectiveLimit);
+      return jsonResult(
+        listResult(data.results, {
+          source: "rest",
+          page: 1,
+          limit: effectiveLimit,
+          total: data.size,
+          itemKey: "spaces",
+        }),
+      );
     },
     "List Confluence spaces",
   );

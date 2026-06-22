@@ -32,6 +32,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   "who-am-i": "whoami 的别名",
   searchContent: "使用 CQL 搜索内容",
   getContent: "获取页面或博客内容",
+  getPageSnapshot: "单次拿到页面快照(focus + body 预览 + labels + comments + attachments + 子页)",
   createContent: "创建 Confluence 内容",
   updateContent: "更新 Confluence 内容",
   deleteContent: "删除 Confluence 内容",
@@ -230,6 +231,17 @@ export function renderCommandHelp(registry: InMemoryCliRegistry, name: string): 
   if (selected.description) lines.push("", selected.description);
   const params = describeParams(selected.schema);
   if (params.length > 0) lines.push("", "Parameters:", ...params.map((param) => `  ${param}`));
+  if (selected.metadata) {
+    const meta = selected.metadata;
+    const metaLines: string[] = [];
+    if (meta.costHint) metaLines.push(`Approx cost: ${meta.costHint}`);
+    if (meta.nextBestTools && meta.nextBestTools.length > 0) {
+      metaLines.push(`Suggested next: ${meta.nextBestTools.map((next) => `confluence ${next}`).join(", ")}`);
+    }
+    if (meta.cacheable === false) metaLines.push("Cache: bypassed");
+    if (meta.idempotent === false) metaLines.push("Idempotent: no (写操作,需要 --confirm true)");
+    if (metaLines.length > 0) lines.push("", "Agent hints:", ...metaLines.map((line) => `  ${line}`));
+  }
   return lines.join("\n");
 }
 

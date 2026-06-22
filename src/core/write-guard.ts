@@ -21,7 +21,22 @@ export interface UnsupportedWriteDiagnostic {
   payload: unknown;
 }
 
-const UNSUPPORTED_WRITE_ACTIONS: Record<string, string> = {};
+/**
+ * 不通过 CLI 暴露的写操作(action-level 拒绝)。
+ *
+ * key 格式: `<commandName>[:<subKind>]`。
+ * - `callRestApi:<METHOD>` 拦截 REST 直通的高危 method(任何 path 都不允许)
+ * - 其它键拦截具体业务动作(若未来加)
+ *
+ * 维护约定:
+ * 1. 新增 command 时,如果动作不可逆/破坏性强/不该被 Agent 脚本化,加一行
+ * 2. AGENTS.md 同步更新写保护章节
+ * 3. 跑 `pnpm typecheck` + `pnpm build` + 命令 dry-run 验证
+ */
+const UNSUPPORTED_WRITE_ACTIONS: Record<string, string> = {
+  "callRestApi:DELETE":
+    "DELETE 操作不通过 CLI 暴露(高危:Confluence DELETE 多为不可逆)。请使用 Confluence UI、官方管理脚本或先 dry-run 列出受影响对象再走支持渠道。",
+};
 
 export function isWriteEnabled(): boolean {
   return process.env.CONFLUENCE_DISABLE_WRITE !== "true";

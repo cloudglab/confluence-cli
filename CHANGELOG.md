@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.0.9 - 2026-06-22
+
+### 新增
+
+- 借鉴 `zentao-cli` 的"AI 友好"设计，新增 `--output compact|normal|verbose` 三档输出模式：`compact`（默认）输出单行不缩进 JSON，数组 >20 截前 20 并保留 `total` 标记，`content` / `data` / `raw` / `html` / `text` / `message` 字段字符串 >600 截前 600 加 `…`；`normal` 不裁剪，自动从结果中抽取 `source` / `partial` / `page` / `limit` / `total` / `scanned` / `durationMs` / `cacheHit` / `fallbackUsed` 组成 `meta`；`verbose` 原样返回（单行）、不注入 `meta`。
+- HTTP 层优化：GET 请求新增 15 秒内存缓存（按 method + path + sortedParams 命中），POST/PUT/DELETE 不缓存；`ECONNRESET` / `ETIMEDOUT` / `EAI_AGAIN` / `ECONNREFUSED` / `EPIPE` 五类网络层错误自动重试 1 次（间隔 100ms）；模块级累计 `requestCount` / `cacheHits` / `retries` / `errors` / `durationMs`，由 `runCli` 在每次 handler 调用前后 `resetMetrics()` 并在结果末尾自动注入 `meta`，重复探测期减少 token 浪费。
+- 命令元数据：22 个核心命令（`whoami` / `initConfluence` / `listSpaces` / `getSpace` / `searchContent` / `getContent` / `findContent` / `report` / `getPageSnapshot` / `getPageChildren` / `getComments` / `addComment` / `deleteContent` / `addLabels` / `deleteLabel` / `getLabels` / `listAttachments` / `uploadAttachment` / `updateAttachment` / `downloadAttachment` / `uploadMarkdown` / `uploadHtml` / `downloadPage` / `callRestApi` / `listRestApis`）的 `COMMAND_METADATA` 表集中维护 `costHint` / `nextBestTools` / `cacheable` / `idempotent`，`help <command>` 末尾渲染 `Agent hints:` 段；写操作额外带 `Cache: bypassed` / `Idempotent: no (写操作,需要 --confirm true)` 两行。
+- 列表型结果结构：新增 `listResult(items, meta)` 工厂（`src/core/list-result.ts`），`searchContent` / `findContent` / `report` / `listSpaces` 四个核心 handler 返回统一的 `{ source, partial, page, limit, total, scanned?, itemKey, items }` 结构；`itemKey` 显式标注 `items[i]` 的语义名（`results` / `pages` / `spaces`），让 Agent 一眼看清分页元信息。
+- 短链路命令 `getPageSnapshot`：把 5 个并行 GET（`getContent` + `getLabels` + `getComments` + `listAttachments` + `getPageChildren`）收成一次调用，返回 `focus`（id / title / type / space / version / ancestors）+ `text`（body 预览，可调长度，默认 1500 字符）+ `labels` + `summary`（4 个 count）+ 3 段 highlights（comments / attachments / children），适合 Agent 首轮探测单页完整画像。
+- 写保护：新增 `UNSUPPORTED_WRITE_ACTIONS` 表（`src/core/write-guard.ts`），先于 `--confirm` / 全局禁写检查生效；目前拦截 `callRestApi:DELETE`（Confluence DELETE 多为不可逆，CLI 不暴露）。
+- 新增命令 `report`：基于 `/content/search` + CQL 日期函数，支持 `--period day|week|month|quarter` 以及 `--from` / `--to` 自定义时间窗，可叠加 `--space` / `--type` / `--creator` 过滤。
+
+### 变更
+
+- `jsonResult` 签名升级为 `jsonResult(value, mode?)`，默认走全局 mode（由 `--output` 控制），保持向后兼容（10 个 tools 文件的旧调用零改动）。
+- `parseCli` 早期解析 `--output`，非法值抛 `无效 output mode: X（需要 compact|normal|verbose）`，空值抛 `--output 需要一个值`，错误信息带候选值便于 Agent 自我修复。
+- `rest.ts` 中 `action` 短化为 `callRestApi:${method}`，便于 `UNSUPPORTED_WRITE_ACTIONS` 表按 method 维度命中；完整 `endpoint.path` 保留在 payload 里，诊断信息不丢。
+
+### 说明
+
+- AGENTS.md 新增"Agent 推荐读法"章节，集中说明输出模式、写保护、短链路调用模板、输出后处理、列表型结果结构、命令元数据、HTTP 层优化与 `UNSUPPORTED_WRITE_ACTIONS` 维护约定。
+- 所有新错误信息、`UNSUPPORTED_WRITE_ACTIONS` 拒绝原因、命令元数据渲染均带候选值或下一步建议，贴合 Agent / Skill 消费的"如何修复"语义。
+
 ## 0.0.8 - 2026-06-18
 
 ### 变更

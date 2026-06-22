@@ -13,8 +13,8 @@ const value = (name, fallback = undefined) => process.env[`CONFLUENCE_SMOKE_${na
 
 const vars = {
   cql: value("CQL", 'type = "page"'),
-  contentId: value("CONTENT_ID"),
-  space: value("SPACE"),
+  contentId: value("CONTENT_ID", "5278156"),
+  space: value("SPACE", "GABI"),
   title: value("TITLE"),
 };
 
@@ -63,7 +63,7 @@ const liveQueries = [
   cmd("getCurrentUser"),
   cmd("listSpaces", "--limit", "5"),
   cmd("searchContent", "--cql", vars.cql, "--limit", "5"),
-  cmdIf("getSpace", ["space"], "--key", vars.space),
+  cmdIf("getSpace", ["space"], "--spaceKey", vars.space),
   cmdIf("getContent", ["contentId"], "--id", vars.contentId, "--expand", "version"),
   cmdIf("getPageChildren", ["contentId"], "--id", vars.contentId, "--limit", "5"),
   cmdIf("getLabels", ["contentId"], "--id", vars.contentId),

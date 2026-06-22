@@ -96,7 +96,30 @@ confluence getLabels --id 123456
 confluence addLabels --id 123456 --labels '["api","docs"]' --confirm true
 confluence listAttachments --id 123456
 confluence uploadAttachment --id 123456 --file docs/a.png --confirm true
+confluence report --period day
+confluence report --period week --space DEV --limit 50
+confluence getPageSnapshot 12345
+confluence searchContent --cql 'space = "DEV"' --output normal
+confluence getContent 12345 --output verbose
 ```
+
+## 输出模式（AI 友好）
+
+CLI 默认输出针对 Agent / Skill 优化：单行不缩进 JSON，handler 返回时由框架层按当前 `--output` 模式裁剪与注入 `meta`，所有错误信息、`UNSUPPORTED_WRITE_ACTIONS` 拒绝原因、命令元数据渲染均带候选值或下一步建议。
+
+```bash
+# 三档模式
+confluence list --output compact          # 默认：数组 >20 截前 20；大字符串截前 600 + …；不注入 meta
+confluence listRestApis --output normal   # 不裁剪；自动抽 source/partial/page/limit/total/scanned 组成 meta
+confluence getContent 12345 --output verbose  # 原样返回（单行）
+
+# 短链路 Agent 探测
+confluence findContent --title "Foo" --space DEV
+confluence getPageSnapshot 12345          # 5 个并行 GET 一次拿到页面完整画像
+confluence report --period day            # 列今天的日报
+```
+
+`help <command>` 末尾会自动渲染 `Agent hints:` 段，写明 `Approx cost: <costHint>` 与 `Suggested next: <nextBestTools>`，方便 Agent 决策下一步。
 
 ## Confluence 7.13.7 REST API 对齐
 
@@ -155,6 +178,7 @@ CONFLUENCE_SKIP_UPDATE_CHECK=true
 - 页面下载为带 frontmatter 的 Markdown，并可下载附件和一层子页
 - 工程化脚本：Vitest 单元测试、发布前查询 smoke、bin 权限修复、CHANGELOG 和 lefthook 检查入口
 - 安装/更新命令、每日更新探针、角色 bin 入口、静态命令速查页和 README 封面资产
+- AI 友好输出：`--output compact|normal|verbose` 三档模式、列表型 `ListResult` 包装、命令元数据 `Agent hints:` 段、HTTP 15s 缓存 + 网络重试 + metrics 注入、`UNSUPPORTED_WRITE_ACTIONS` 高危拦截、`getPageSnapshot` 短链路命令、`report` 周期查询命令
 
 ## 项目级 OpenCode 命令
 

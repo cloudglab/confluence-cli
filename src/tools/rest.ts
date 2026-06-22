@@ -45,7 +45,10 @@ export function registerRestTools(registry: CliRegistry): void {
       const query = input.query ?? {};
       const resolvedPath = applyPathParams(endpoint.path, pathParams);
       if (endpoint.write) {
-        const preview = previewOrAssertWriteAllowed({ action: `callRestApi:${method} ${endpoint.path}`, confirm: input.confirm, payload: { method, path: endpoint.path, resolvedPath, query, body: input.body } });
+        // action 短化到 method 级别,UNSUPPORTED_WRITE_ACTIONS 用 method-only key 匹配;
+        // 完整 endpoint.path 保留在 payload 里,诊断信息不丢。
+        const action = `callRestApi:${method}`;
+        const preview = previewOrAssertWriteAllowed({ action, confirm: input.confirm, payload: { method, path: endpoint.path, resolvedPath, query, body: input.body } });
         if (preview) return jsonResult(preview);
       }
 

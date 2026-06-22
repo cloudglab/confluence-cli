@@ -1,6 +1,7 @@
-import axios, { type AxiosInstance } from "axios";
+import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import type { RestMethod } from "../api/endpoints.js";
 import type { ConfluenceConfig } from "../types/common.js";
+import { recordCacheHit, recordRequest, recordRetry } from "./http-metrics.js";
 
 export interface MultipartFile {
   fieldName: string;
@@ -14,8 +15,18 @@ export interface HttpError extends Error {
   responseBody?: unknown;
 }
 
+interface CacheEntry {
+  body: unknown;
+  expiresAt: number;
+}
+
+const GET_CACHE_TTL_MS = 15_000;
+const RETRYABLE_NETWORK_CODES = new Set(["ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ECONNREFUSED", "EPIPE"]);
+const RETRY_DELAY_MS = 100;
+
 export class ConfluenceHttpClient {
   private readonly client: AxiosInstance;
+  private readonly getCache = new Map<string, CacheEntry>();
 
   constructor(config: ConfluenceConfig) {
     this.client = axios.create({
@@ -30,48 +41,69 @@ export class ConfluenceHttpClient {
   }
 
   async get<T>(path: string, params?: Record<string, unknown>): Promise<T> {
-    try {
-      const response = await this.client.get<T>(path, { params });
-      return response.data;
-    } catch (error) {
-      throw normalizeHttpError(error);
+    const cacheKey = this.makeCacheKey("GET", path, params);
+    const cached = this.lookupCache<T>(cacheKey);
+    if (cached !== undefined) {
+      recordCacheHit();
+      return cached;
     }
+    return this.executeWithMetrics("GET", path, { params });
   }
 
   async post<T>(path: string, data: unknown): Promise<T> {
+    const start = Date.now();
     try {
-      const response = await this.client.post<T>(path, data, { headers: { "Content-Type": "application/json" } });
+      const response = await this.executeWithNetworkRetry<T>(() =>
+        this.client.post<T>(path, data, { headers: { "Content-Type": "application/json" } }),
+      );
+      recordRequest(Date.now() - start, true);
       return response.data;
     } catch (error) {
+      recordRequest(Date.now() - start, false);
       throw normalizeHttpError(error);
     }
   }
 
   async put<T>(path: string, data: unknown): Promise<T> {
+    const start = Date.now();
     try {
-      const response = await this.client.put<T>(path, data, { headers: { "Content-Type": "application/json" } });
+      const response = await this.executeWithNetworkRetry<T>(() =>
+        this.client.put<T>(path, data, { headers: { "Content-Type": "application/json" } }),
+      );
+      recordRequest(Date.now() - start, true);
       return response.data;
     } catch (error) {
+      recordRequest(Date.now() - start, false);
       throw normalizeHttpError(error);
     }
   }
 
   async delete<T>(path: string, params?: Record<string, unknown>): Promise<T> {
+    const start = Date.now();
     try {
-      const response = await this.client.delete<T>(path, { params });
+      const response = await this.executeWithNetworkRetry<T>(() => this.client.delete<T>(path, { params }));
+      recordRequest(Date.now() - start, true);
       return response.data;
     } catch (error) {
+      recordRequest(Date.now() - start, false);
       throw normalizeHttpError(error);
     }
   }
 
   async request<T>(method: RestMethod, path: string, params?: Record<string, unknown>, data?: unknown): Promise<T> {
-    try {
-      const response = await this.client.request<T>({ method, url: path, params, data, headers: data === undefined ? undefined : { "Content-Type": "application/json" } });
-      return response.data;
-    } catch (error) {
-      throw normalizeHttpError(error);
+    if (method === "GET") {
+      const cacheKey = this.makeCacheKey("GET", path, params);
+      const cached = this.lookupCache<T>(cacheKey);
+      if (cached !== undefined) {
+        recordCacheHit();
+        return cached;
+      }
     }
+    return this.executeWithMetrics<T>(method, path, {
+      params,
+      data,
+      headers: data === undefined ? undefined : { "Content-Type": "application/json" },
+    });
   }
 
   async postMultipart<T>(path: string, fields: Record<string, string | boolean | number | undefined>, files: MultipartFile[]): Promise<T> {
@@ -83,33 +115,98 @@ export class ConfluenceHttpClient {
   }
 
   async getBuffer(path: string, params?: Record<string, unknown>): Promise<{ data: Buffer; headers: Record<string, unknown> }> {
-    try {
-      const response = await this.client.get<ArrayBuffer>(path, { params, responseType: "arraybuffer" });
-      return { data: Buffer.from(response.data), headers: response.headers as Record<string, unknown> };
-    } catch (error) {
-      throw normalizeHttpError(error);
-    }
+    return this.executeWithMetricsBuffer("GET", path, { params, responseType: "arraybuffer" });
   }
 
   private async multipart<T>(method: "POST" | "PUT", path: string, fields: Record<string, string | boolean | number | undefined>, files: MultipartFile[]): Promise<T> {
     const boundary = `----confluence-cli-${Date.now().toString(16)}`;
     const body = buildMultipartBody(boundary, fields, files);
+    return this.executeWithMetrics<T>(method, path, {
+      data: body,
+      headers: {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Content-Length": body.length,
+        "X-Atlassian-Token": "no-check",
+      },
+    });
+  }
+
+  private async executeWithMetrics<T>(method: RestMethod, path: string, config: AxiosRequestConfig): Promise<T> {
+    const start = Date.now();
     try {
-      const response = await this.client.request<T>({
-        method,
-        url: path,
-        data: body,
-        headers: {
-          "Content-Type": `multipart/form-data; boundary=${boundary}`,
-          "Content-Length": body.length,
-          "X-Atlassian-Token": "no-check",
-        },
-      });
-      return response.data;
+      const response = await this.executeWithNetworkRetry<T>(() => this.client.request<T>({ method, url: path, ...config }));
+      const body = response.data;
+      recordRequest(Date.now() - start, true);
+      if (method === "GET") {
+        this.getCache.set(this.makeCacheKey("GET", path, config.params), {
+          body,
+          expiresAt: Date.now() + GET_CACHE_TTL_MS,
+        });
+      }
+      return body;
     } catch (error) {
+      recordRequest(Date.now() - start, false);
       throw normalizeHttpError(error);
     }
   }
+
+  private async executeWithMetricsBuffer(method: RestMethod, path: string, config: AxiosRequestConfig): Promise<{ data: Buffer; headers: Record<string, unknown> }> {
+    const start = Date.now();
+    try {
+      const response = await this.executeWithNetworkRetry<ArrayBuffer>(() => this.client.request<ArrayBuffer>({ method, url: path, ...config }));
+      recordRequest(Date.now() - start, true);
+      return { data: Buffer.from(response.data), headers: response.headers as Record<string, unknown> };
+    } catch (error) {
+      recordRequest(Date.now() - start, false);
+      throw normalizeHttpError(error);
+    }
+  }
+
+  /**
+   * 网络层错误(`ECONNRESET` / `ETIMEDOUT` / `EAI_AGAIN` / `ECONNREFUSED` / `EPIPE`)
+   * 重试 1 次。HTTP 4xx/5xx 直接抛错,不重试。
+   */
+  private async executeWithNetworkRetry<T>(action: () => Promise<AxiosResponse<T>>): Promise<AxiosResponse<T>> {
+    try {
+      return await action();
+    } catch (error) {
+      if (!isRetryableNetworkError(error)) throw error;
+      recordRetry();
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      return action();
+    }
+  }
+
+  private makeCacheKey(method: string, path: string, params?: Record<string, unknown>): string {
+    const sorted = params ? sortParams(params) : undefined;
+    return `${method} ${path} ${sorted ? JSON.stringify(sorted) : ""}`;
+  }
+
+  private lookupCache<T>(key: string): T | undefined {
+    const entry = this.getCache.get(key);
+    if (!entry) return undefined;
+    if (entry.expiresAt < Date.now()) {
+      this.getCache.delete(key);
+      return undefined;
+    }
+    return entry.body as T;
+  }
+}
+
+function isRetryableNetworkError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  if (error.response) return false;
+  const code = error.code;
+  return typeof code === "string" && RETRYABLE_NETWORK_CODES.has(code);
+}
+
+function sortParams(params: Record<string, unknown>): Record<string, unknown> {
+  const sortedEntries = Object.entries(params).sort(([a], [b]) => a.localeCompare(b));
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of sortedEntries) {
+    result[key] = value;
+  }
+  return result;
 }
 
 function buildMultipartBody(boundary: string, fields: Record<string, string | boolean | number | undefined>, files: MultipartFile[]): Buffer {

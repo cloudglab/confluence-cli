@@ -11,6 +11,9 @@ import {
 import { buildRegistryForCommand, getAvailableCommandNames } from "./core/manifest.js";
 import { runInstallCommand, runUninstallCommand, runUpdateCommand } from "./install.js";
 import { runDailyUpdateProbe } from "./update-probe.js";
+import { appendCommandMeta } from "./utils/output-mode.js";
+import { isValidOutputMode, setGlobalOutputMode } from "./utils/result.js";
+import { resetMetrics, snapshotMetrics } from "./core/http-metrics.js";
 import { VERSION } from "./version.js";
 import type { Role } from "./types/common.js";
 
@@ -94,7 +97,9 @@ export async function runCli(argv: string[]): Promise<void> {
   }
 
   const input = parseCommandInput(selected.schema, commandArgs);
-  const result = await selected.handler(input);
+  resetMetrics();
+  const rawResult = await selected.handler(input);
+  const result = appendCommandMeta(rawResult, { ...snapshotMetrics() });
   process.stdout.write(`${result.content[0]?.text ?? ""}\n`);
 }
 
@@ -161,6 +166,29 @@ function parseChangelogOptions(args: string[]): ChangelogOptions {
 function parseCli(argv: string[]): { command?: string; commandArgs: string[]; role: Role } {
   const args = [...argv];
   let role: Role = "full";
+
+  // --output compact|normal|verbose: 必须在 runCli 早期应用,以便影响所有 handler
+  const inlineOutputIndex = args.findIndex((arg) => arg.startsWith("--output="));
+  if (inlineOutputIndex >= 0) {
+    const value = args[inlineOutputIndex].slice("--output=".length);
+    if (!isValidOutputMode(value)) {
+      throw new Error(`无效 output mode: ${value}（需要 compact|normal|verbose）`);
+    }
+    setGlobalOutputMode(value);
+    args.splice(inlineOutputIndex, 1);
+  }
+
+  const outputIndex = args.indexOf("--output");
+  if (outputIndex >= 0) {
+    const value = args[outputIndex + 1];
+    if (!value) throw new Error("--output 需要一个值");
+    if (!isValidOutputMode(value)) {
+      throw new Error(`无效 output mode: ${value}（需要 compact|normal|verbose）`);
+    }
+    setGlobalOutputMode(value);
+    args.splice(outputIndex, 2);
+  }
+
   const inlineRoleIndex = args.findIndex((arg) => arg.startsWith("--role=") || arg.startsWith("-r="));
   if (inlineRoleIndex >= 0) {
     const value = args[inlineRoleIndex].split("=", 2)[1];

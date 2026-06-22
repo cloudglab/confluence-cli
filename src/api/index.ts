@@ -53,6 +53,20 @@ export class ConfluenceApi {
     return this.http.get("/content/search", { cql, limit, expand: "space,version" });
   }
 
+  getReport(input: {
+    cql: string;
+    start?: number;
+    limit?: number;
+    expand?: string;
+  }): Promise<ConfluencePage<ConfluenceContent>> {
+    return this.http.request("GET", "/content/search", {
+      cql: input.cql,
+      start: input.start ?? 0,
+      limit: input.limit ?? 25,
+      expand: input.expand ?? "space,history,history.lastUpdated,metadata.labels",
+    });
+  }
+
   getContent(id: string, expand = "body.storage,version,space,ancestors,metadata.labels"): Promise<ConfluenceContent> {
     return this.http.get(`/content/${encodeURIComponent(id)}`, { expand });
   }
@@ -223,4 +237,106 @@ export class ConfluenceApi {
   request<T>(method: RestMethod, path: string, query?: Record<string, unknown>, body?: unknown): Promise<T> {
     return this.http.request<T>(method, path, query, body);
   }
+
+  /**
+   * 单次拿到页面的"焦点上下文":核心字段 + body 预览 + labels + 摘要 + 关键列表前 N 条。
+   * 借鉴 zentao-cli `getBugSnapshot` / `getExecutionSnapshot` 的 focus + summary + highlights 三段式。
+   * 5 个 REST 调用并行(`Promise.all`)。对 Agent 首轮探测页面非常友好。
+   */
+  async getPageSnapshot(input: {
+    id: string;
+    bodyPreviewChars?: number;
+    commentLimit?: number;
+    attachmentLimit?: number;
+    childLimit?: number;
+  }): Promise<PageSnapshot> {
+    const bodyPreviewChars = input.bodyPreviewChars ?? 1500;
+    const commentLimit = input.commentLimit ?? 5;
+    const attachmentLimit = input.attachmentLimit ?? 10;
+    const childLimit = input.childLimit ?? 10;
+
+    const [page, labelsResult, comments, attachments, children] = await Promise.all([
+      this.getContent(input.id, "body.storage,version,space,ancestors"),
+      this.getLabels(input.id, 100),
+      this.getComments(input.id, "version", commentLimit),
+      this.listAttachments(input.id, attachmentLimit),
+      this.getChildren(input.id, "page", "version", childLimit),
+    ]);
+
+    const storageBody = page.body?.storage?.value ?? "";
+
+    return {
+      pageId: page.id,
+      focus: {
+        id: page.id,
+        title: page.title,
+        type: page.type,
+        spaceKey: page.space?.key,
+        spaceName: page.space?.name,
+        version: page.version?.number,
+        updatedBy: page.version?.by?.displayName,
+        updatedAt: page.version?.when,
+        ancestors: page.ancestors,
+      },
+      text: {
+        bodyPreview: storageBody.slice(0, bodyPreviewChars),
+        bodyTruncated: storageBody.length > bodyPreviewChars,
+        bodyLength: storageBody.length,
+      },
+      labels: labelsResult.results.map((label) => ({ prefix: label.prefix, name: label.name })),
+      summary: {
+        labelCount: labelsResult.size,
+        commentCount: comments.size,
+        attachmentCount: attachments.size,
+        childPageCount: children.size,
+      },
+      comments: comments.results.map((comment) => ({
+        id: comment.id,
+        title: comment.title,
+        version: comment.version?.number,
+      })),
+      attachments: attachments.results.map((attachment) => ({
+        id: attachment.id,
+        title: attachment.title,
+        version: attachment.version?.number,
+        mediaType: attachment.metadata?.mediaType,
+      })),
+      childPages: children.results.map((child) => ({
+        id: child.id,
+        title: child.title,
+        type: child.type,
+        version: child.version?.number,
+      })),
+    };
+  }
+}
+
+export interface PageSnapshot {
+  pageId: string;
+  focus: {
+    id: string;
+    title: string;
+    type: string;
+    spaceKey?: string;
+    spaceName?: string;
+    version?: number;
+    updatedBy?: string;
+    updatedAt?: string;
+    ancestors?: Array<{ id: string; title: string }>;
+  };
+  text: {
+    bodyPreview: string;
+    bodyTruncated: boolean;
+    bodyLength: number;
+  };
+  labels: Array<{ prefix?: string; name: string }>;
+  summary: {
+    labelCount: number;
+    commentCount: number;
+    attachmentCount: number;
+    childPageCount: number;
+  };
+  comments: Array<{ id: string; title: string; version?: number }>;
+  attachments: Array<{ id: string; title: string; version?: number; mediaType?: string }>;
+  childPages: Array<{ id: string; title: string; type: string; version?: number }>;
 }

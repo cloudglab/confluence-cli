@@ -52,10 +52,11 @@ describe("runDailyUpdateProbe", () => {
     }));
     const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const { runDailyUpdateProbe } = await import("../src/update-probe.js");
+    const { VERSION } = await import("../src/version.js");
 
     await runDailyUpdateProbe("searchContent");
 
-    expect(write).toHaveBeenCalledWith(expect.stringContaining("检测到 Confluence CLI 新版本 0.1.20（当前 0.0.8）。"));
+    expect(write).toHaveBeenCalledWith(expect.stringContaining(`检测到 Confluence CLI 新版本 0.1.20（当前 ${VERSION}）。`));
     expect(write).toHaveBeenCalledWith(expect.stringContaining("confluence update --skip-config-check"));
   });
 

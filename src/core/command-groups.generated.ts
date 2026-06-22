@@ -23,6 +23,8 @@ export const commandToGroup: Record<string, string> = {
   "getComments": "content",
   "getContent": "content",
   "getPageChildren": "content",
+  "getPageSnapshot": "content",
+  "report": "content",
   "searchContent": "content",
   "addLabels": "labels",
   "deleteLabel": "labels",
@@ -72,6 +74,8 @@ export const groupCommands: Record<string, string[]> = {
     "getComments",
     "getContent",
     "getPageChildren",
+    "getPageSnapshot",
+    "report",
     "searchContent"
   ],
   "labels": [

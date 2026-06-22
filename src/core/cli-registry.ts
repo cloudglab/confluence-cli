@@ -1,15 +1,40 @@
 import { z, type ZodTypeAny } from "zod";
 import type { JsonContentResult, ToolHandler } from "../types/common.js";
 
+/**
+ * 命令元数据,用于帮 Agent 在跑命令前了解代价和后续推荐步骤。
+ * 对齐 zentao-cli 的 `CliCommandDefinition.metadata`。
+ *
+ * - `costHint`: 描述本命令的开销(如 "1 REST 请求" / "1-2 REST 请求 + 可能更新缓存");
+ *   不写绝对耗时,因为网络/Confluence 实例差异大。
+ * - `nextBestTools`: 跑完本命令后,Agent 下一步可能用到的命令(用命令名数组)。
+ *   渲染在 `help <command>` 末尾。
+ * - `cacheable`: 标记本命令读路径(GET)是否会被 15s 缓存(默认 true)。
+ * - `idempotent`: 标记本命令是否幂等(默认 true,只对写操作 false)。
+ */
+export interface CommandMetadata {
+  costHint?: string;
+  nextBestTools?: string[];
+  cacheable?: boolean;
+  idempotent?: boolean;
+}
+
 export interface RegisteredTool<TInput = unknown> {
   name: string;
   description?: string;
   schema: z.ZodType<TInput>;
   handler: ToolHandler<TInput>;
+  metadata?: CommandMetadata;
 }
 
 export interface CliRegistry {
-  tool<TInput>(name: string, schema: z.ZodType<TInput>, handler: ToolHandler<TInput>, description?: string): void;
+  tool<TInput>(
+    name: string,
+    schema: z.ZodType<TInput>,
+    handler: ToolHandler<TInput>,
+    description?: string,
+    metadata?: CommandMetadata,
+  ): void;
   get(name: string): RegisteredTool | undefined;
   list(): RegisteredTool[];
 }
@@ -17,8 +42,14 @@ export interface CliRegistry {
 export class InMemoryCliRegistry implements CliRegistry {
   private readonly tools = new Map<string, RegisteredTool>();
 
-  tool<TInput>(name: string, schema: z.ZodType<TInput>, handler: ToolHandler<TInput>, description?: string): void {
-    this.tools.set(name, { name, schema, handler: handler as ToolHandler<unknown>, description });
+  tool<TInput>(
+    name: string,
+    schema: z.ZodType<TInput>,
+    handler: ToolHandler<TInput>,
+    description?: string,
+    metadata?: CommandMetadata,
+  ): void {
+    this.tools.set(name, { name, schema, handler: handler as ToolHandler<unknown>, description, metadata });
   }
 
   get(name: string): RegisteredTool | undefined {

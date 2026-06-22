@@ -63,7 +63,7 @@ describe("runCli", () => {
     await runCli(["help"]);
 
     const output = String(write.mock.calls.at(-1)?.[0] ?? "");
-    expect(output).toContain("confluence CLI 0.0.8");
+    expect(output).toMatch(/confluence CLI \d+\.\d+\.\d+/);
     expect(output).toContain("运行要求：Node.js >= 20");
     expect(output).toContain("confluence [--role full|reader|writer] <command> [--key value]");
     expect(output).toContain("confluence whoami");
@@ -200,6 +200,8 @@ describe("runCli", () => {
     const { runCli: runCliWithMocks } = await import("../src/cli.js");
     await runCliWithMocks(["who", "am", "i"]);
 
-    expect(write).toHaveBeenCalledWith(`${JSON.stringify(currentUser, null, 2)}\n`);
+    const lastWrite = String(write.mock.calls.at(-1)?.[0] ?? "");
+    const parsed = JSON.parse(lastWrite.trim());
+    expect(parsed).toMatchObject(currentUser);
   });
 });
