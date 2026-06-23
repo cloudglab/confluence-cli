@@ -9,6 +9,7 @@ export const commandToGroup: Record<string, string> = {
   "convertMarkdownToWiki": "convert",
   "convertMermaidToDrawio": "convert",
   "generateMarkMetadata": "metadata",
+  "urlParse": "metadata",
   "callRestApi": "rest",
   "listRestApis": "rest",
   "convertContentBody": "space",
@@ -53,7 +54,8 @@ export const groupCommands: Record<string, string[]> = {
     "convertMermaidToDrawio"
   ],
   "metadata": [
-    "generateMarkMetadata"
+    "generateMarkMetadata",
+    "urlParse"
   ],
   "rest": [
     "callRestApi",

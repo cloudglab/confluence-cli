@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.0.10 - 2026-06-22
+
+### 新增
+
+- 新增独立解析器 `src/core/url-parser.ts`（332 行）：从 Confluence 网页 URL 推断用户意图，返回结构化 `ParsedUrl`（`originalUrl` / `parsed.{host,pathname,search,hash}` / `matchedServer` / `routeKind` / `params` / `primaryCommand` / `suggestedCommands` / `note`），覆盖 13 种路由（`page` / `space` / `edit` / `comment` / `history` / `search` / `attachment` / `folder` / `api` / `dashboard` / `tiny link` / `unknown`）。参数语义化使用业务字段名（`pageId` / `spaceKey` / `attachmentId` / `folderId` / `shortCode`）而非 raw `:id`。
+- 新增显式命令 `urlParse`（`src/tools/metadata.ts` + `src/core/tool-registry.ts`），`help` 末尾标注 `costHint: 0 REST 请求(纯字符串解析,不发请求)` + `nextBestTools: getContent / getSpace / searchContent`，`AGENTS.md` 增"URL 解析"章节。
+- 隐式入口：`src/cli.ts:parseCli` 在 `normalizeCommandAlias` 之后检测首参 URL（`looksLikeUrl`），自动重写为 `urlParse`，用户可直接 `pnpm dev:reader <URL>` 触发解析。
+- 13 种 `routeKind` 与主命令映射：`page → getContent`、`space → getSpace`、`search → searchContent`、`attachment → downloadAttachment`、`edit → getContent`（只读,改写走 `uploadMarkdown` / `uploadHtml`）、`history → getContent --expand version`、`api → callRestApi`、`dashboard / folder / tiny link / unknown` 保守给候选 + `note` 说明。
+
+### 变更
+
+- `defaultExpectedHost()` 两步回退：先读 `process.env.CONFLUENCE_URL`，缺失时调 `loadConfluenceConfig()` 从 `config.url` 转 host；任一失败（凭证缺失等）静默返回 `undefined`，URL 解析不阻塞。主机严格相等比较（`url.host === expected`），不匹配时 `matchedServer` 标 `false` 但仍继续解析，`note` 自动追加 `主机不匹配(标 matchedServer=false,主命令仍可试,但跨域可能受限)。`
+- 新增 `requireMatchedServer` 选项：开启后主机不匹配直接抛错（错误信息带候选值，便于 Agent 自我修复：`URL 主机 X 与期望 Y 不一致(可省略该检查或传 expectedHost 强制解析)。`）。
+- `parseConfluenceUrl` 自动补 scheme（无 `https://` 时补默认）；支持剥 `/wiki` / `/confluence` base path（Cloud / DC 通用）；`safeDecode` 兜底 `decodeURIComponent` 防非法编码。
+
+### 测试
+
+- 新增 `tests/core/url-parser.test.ts`（45 个 it 块）覆盖 13 种 `routeKind`、`matchedServer` 三态（env / config / 显式 `expectedHost` / 主机不匹配）、边界（raw path / 空字符串 / 无效 URL / base path 剥除 / 中文文件名）、`looksLikeUrl`（`https?://` / `atlassian.net` / `cloudglab.cn` / `confluence.` / 普通字符串）、`requireMatchedServer` 抛错、`defaultExpectedHost` env 优先与非 URL 不抛、`unknown` 保留 `rawPath` 调试。
+
 ## 0.0.9 - 2026-06-22
 
 ### 新增

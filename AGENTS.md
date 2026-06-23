@@ -140,6 +140,63 @@ Agent hints:
 
 例：跑 `pnpm dev:writer callRestApi --method DELETE --path /content/{id} --pathParams '{"id":123}'` 会直接返回 `supported: false` 的 diagnostic，不发请求。
 
+### URL 解析（`url-parse`）
+
+面向 Agent 的"把用户粘贴的 Confluence URL 翻译成命令"能力。纯字符串解析，**不发任何请求**。
+
+#### 两种入口
+
+- **显式**：`pnpm dev:reader urlParse --url '<URL>'` → 打印 `ParsedUrl` JSON
+- **隐式**：`pnpm dev:reader '<URL>'` 首参是 URL 时自动走 `urlParse`
+
+```bash
+pnpm dev:reader urlParse --url 'https://cf.cloudglab.cn/pages/viewpage.action?pageId=5278156'
+pnpm dev:reader 'https://cf.cloudglab.cn/wiki/spaces/GABI/pages/5278156/GA-BI'
+```
+
+#### 13 种 `routeKind`
+
+| 路由 | 例子 | 主命令 | 备注 |
+|---|---|---|---|
+| `page` | `viewpage.action?pageId=...`、`/spaces/K/pages/ID/Title`、`/display/K/slug-id` | `getContent` | 主命令拉正文；`getPageSnapshot` 一次拿完整画像 |
+| `space` | `/spaces/K/overview`、`/display/K` | `getSpace` | 空间元信息 |
+| `attachment` | `/download/attachments/ID/file.pdf?version=2` | `downloadAttachment` | filename 自动 URL-decode |
+| `edit` | `/pages/editpage.action?pageId=...` | `getContent`（只读） | 改写走 `uploadMarkdown`/`uploadHtml`（需 `--confirm true`） |
+| `comment` | `viewpage.action#comment-N`（hash）或 `?focusedCommentId=N`（Cloud） | `getComments` | commentId 仅锚点，无独立读路径 |
+| `history` | `/pages/viewpreviousversions.action?pageId=...` | `getContent --expand version` | 拿版本元信息 |
+| `search` | `/search?queryString=...` | `searchContent` | queryString 自动 URL-decode |
+| `dashboard` | `/dashboard` | — | 候选：`listSpaces` / `searchContent` / `report` |
+| `api` | `/rest/api/...` | `callRestApi` | DELETE 被 `UNSUPPORTED_WRITE_ACTIONS` 拦截 |
+| `unknown` | `/x/<SHORTCODE>`（Tiny link）或未匹配 | — | 候选：`searchContent` / `listSpaces` / `listRestApis` |
+| `folder` | `/spaces/K/folder/<ID>` | — | Cloud folder 资源，`isFolder=1` 标记 |
+| `space-overview` | `/spaces/K/overview` | `getSpace` | 空间主页 |
+| `slug-id` | `/spaces/K/<slug>-<pageId>` | `getContent` | 从 slug 末尾提取 pageId |
+
+#### `matchedServer` 行为
+
+- **true**：URL 主机与期望 host 严格相等
+- **false**：主机不匹配 → `note` 自动追加 `主机不匹配(标 matchedServer=false,主命令仍可试,但跨域可能受限)。`
+- **不传 expectedHost**：默认 `false`（无配置 = 无断言）
+
+期望 host 来源（自动检测，无需手动传）：
+
+1. `process.env.CONFLUENCE_URL`（显式优先）
+2. `loadConfluenceConfig()` 加载 `~/.confluence/config.json` 的 `url`（fallback，try/catch 静默）
+3. 也可在 `urlParse --requireMatchedServer true` 强制要求匹配，**不匹配时抛错**
+
+#### 已知限制
+
+- **Tiny link `/x/<SHORTCODE>`**：Confluence Cloud 私有编码，无本地短码表，标记为 `unknown` + `shortCode` 参数，建议用 `searchContent` 按标题找
+- **Tiny link 在线解码**：HEAD `https://cf.cloudglab.cn/x/<SHORTCODE>` 拿 302 后的真实 URL 再解析（CLI 暂未实现）
+- **历史版本号**：`viewpreviousversions.action?pageId=X` 解析不出 version 号（页面参数无），需 `getContent --expand version`
+
+#### 相关源码
+
+- 解析器：`src/core/url-parser.ts`（332 行，13 路由分支）
+- 命令注册：`src/tools/metadata.ts`（`urlParse`）
+- 隐式入口：`src/cli.ts`（`parseCli` 内 `looksLikeUrl` 检测 + 重写 command）
+- 测试：`tests/core/url-parser.test.ts`（45 个 it 覆盖 13 路由 + matchedServer + 边界 + `looksLikeUrl`）
+
 ## 常用命令
 
 - `pnpm install`

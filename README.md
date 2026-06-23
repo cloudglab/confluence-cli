@@ -101,6 +101,12 @@ confluence report --period week --space DEV --limit 50
 confluence getPageSnapshot 12345
 confluence searchContent --cql 'space = "DEV"' --output normal
 confluence getContent 12345 --output verbose
+
+# URL 解析（显式 + 隐式入口）
+confluence urlParse --url 'https://cf.cloudglab.cn/pages/viewpage.action?pageId=5278156'
+confluence 'https://cf.cloudglab.cn/wiki/spaces/GABI/pages/5278156/GA-BI'   # 首参 URL 自动走 urlParse
+confluence 'https://cf.cloudglab.cn/wiki/spaces/GABI/pages/5278156/GA-BI#comment-12345'  # 评论
+confluence 'https://cf.cloudglab.cn/download/attachments/5278156/diagram.png?version=2'  # 附件
 ```
 
 ## 输出模式（AI 友好）
@@ -120,6 +126,16 @@ confluence report --period day            # 列今天的日报
 ```
 
 `help <command>` 末尾会自动渲染 `Agent hints:` 段，写明 `Approx cost: <costHint>` 与 `Suggested next: <nextBestTools>`，方便 Agent 决策下一步。
+
+## URL 解析
+
+把 Confluence 网页 URL 直接喂给 CLI，自动推断用户意图并给主命令 + 备选。两层入口：显式 `urlParse --url <URL>` 与首参 URL 隐式（`pnpm dev:reader <URL>`）。
+
+支持 13 种路由：`page` / `space` / `edit` / `comment` / `history` / `search` / `attachment` / `folder` / `api` / `dashboard` / `tiny link` / `unknown` 等。`pageId` / `spaceKey` / `attachmentId` / `folderId` / `shortCode` 等业务字段名语义化解析，非 raw `:id`。
+
+`matchedServer` 严格比对主机：默认从 `CONFLUENCE_URL` / `~/.confluence/config.json` 推断期望 host；不匹配仍解析 + 标 `false`，`note` 提示跨域可能受限；显式 `--requireMatchedServer true` 可强制要求匹配。
+
+已知限制：`/x/<SHORTCODE>` 是 Confluence Cloud 私有短码（`unknown` + `shortCode` 参数），需 HEAD 在线解码或服务端解析；历史版本号在 `viewpreviousversions.action?pageId=X` 解析不出，需 `getContent --expand version`。
 
 ## Confluence 7.13.7 REST API 对齐
 

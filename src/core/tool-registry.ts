@@ -75,6 +75,9 @@ const COMMAND_METADATA: Record<string, CommandMetadata> = {
   // rest
   callRestApi: { costHint: "1 REST 请求(任意 method,POST/PUT/DELETE 不缓存)", nextBestTools: ["searchContent", "getContent"] },
   listRestApis: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["callRestApi"] },
+
+  // metadata
+  urlParse: { costHint: "0 REST 请求(纯字符串解析,不发请求)", nextBestTools: ["getContent", "getSpace", "searchContent"] },
 };
 
 export async function registerTools(registry: CliRegistry, role: Role, options: RegisterToolsOptions = {}): Promise<void> {

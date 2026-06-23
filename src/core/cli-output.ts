@@ -23,6 +23,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   convertMarkdownToWiki: "将 Markdown 转换为 Confluence Wiki 标记",
   convertMermaidToDrawio: "将 Mermaid 图转换为 draw.io XML",
   generateMarkMetadata: "生成 Markdown 页面元数据",
+  urlParse: "解析 Confluence 网页 URL 为结构化意图",
   request: "发送原始 Confluence REST 请求",
   searchSpace: "搜索 Confluence 空间",
   listSpaces: "列出 Confluence 空间",

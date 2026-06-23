@@ -1,4 +1,5 @@
 import { parseCommandInput } from "./core/cli-registry.js";
+import { looksLikeUrl } from "./core/url-parser.js";
 import {
   BUILTIN_COMMAND_NAMES,
   getBuiltinCommandHelp,
@@ -210,6 +211,18 @@ function parseCli(argv: string[]): { command?: string; commandArgs: string[]; ro
   }
 
   const normalized = normalizeCommandAlias(args[0], args.slice(1));
+
+  // 隐式 URL 入口:首参是 URL 时,自动走 urlParse
+  if (normalized.command && looksLikeUrl(normalized.command)) {
+    const url = normalized.command;
+    const remaining = args.slice(1 + normalized.consumedArgs);
+    return {
+      command: "urlParse",
+      commandArgs: ["--url", url, ...remaining],
+      role,
+    };
+  }
+
   return {
     command: normalized.command,
     commandArgs: args.slice(1 + normalized.consumedArgs),

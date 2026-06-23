@@ -4,7 +4,8 @@ import { z } from "zod";
 import type { CliRegistry } from "../core/cli-registry.js";
 import { parseMarkdown } from "../utils/markdown.js";
 import { createMarkMetadata, removeMarkMetadata } from "../utils/mark-metadata.js";
-import { textResult } from "../utils/result.js";
+import { jsonResult, textResult } from "../utils/result.js";
+import { parseConfluenceUrl } from "../core/url-parser.js";
 
 export function registerMetadataTools(registry: CliRegistry): void {
   registry.tool(
@@ -27,5 +28,18 @@ export function registerMetadataTools(registry: CliRegistry): void {
       return textResult(`Updated ${file}`);
     },
     "Generate or write mark-compatible metadata comments",
+  );
+
+  registry.tool(
+    "urlParse",
+    z.object({
+      url: z.string().describe("Confluence 完整 URL(如 https://cf.example.com/pages/viewpage.action?pageId=12345)"),
+      requireMatchedServer: z.boolean().default(false).describe("强制要求 URL 主机与 CONFLUENCE_URL 匹配,否则抛错"),
+    }),
+    ({ url, requireMatchedServer }) => {
+      const parsed = parseConfluenceUrl(url, { requireMatchedServer });
+      return jsonResult(parsed);
+    },
+    "Parse a Confluence web URL into structured intent (pageId/spaceKey/routeKind/primaryCommand/...)",
   );
 }
