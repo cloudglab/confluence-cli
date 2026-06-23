@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.0.11 - 2026-06-24
+
+### 修复
+
+- 安装成功提示中的 ASCII banner 重新对齐为固定模板，与仓库内参考字符画保持一致，减少不同终端宽度和字体下的视觉错位。
+
+### 文档
+
+- README 同步修正命令示例中的参数写法：`getPageSnapshot`、`getContent` 改为显式 `--id` 形式，并补充 `addComment --body` 示例，避免直接照抄后触发参数错误。
+
 ## 0.0.10 - 2026-06-22
 
 ### 新增

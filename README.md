@@ -29,6 +29,8 @@ Mermaid 目前仍有一个已知限制：内置渲染器不支持 `%%{init: ...}
 
 当前版本还补齐了 `zentao-cli` 风格的账号快捷命令：`confluence whoami`、`confluence who-am-i`，以及口语化输入 `confluence who am i`。
 
+安装成功后的 ASCII banner 现在固定使用仓库内置模板，终端里更容易保持左右对齐，减少字符画偏移。
+
 `install` / `update` 在以下情况会**继续完成安装**而不是中断：
 
 - `beautiful-mermaid-cli` 安装失败时，会打印 `已跳过 beautiful-mermaid-cli 安装：<原因>` 与 `后续如需 Mermaid 图片渲染，可稍后重试安装，或在上传时传 --mermaid none 保留代码块。`。
@@ -80,6 +82,8 @@ confluence list
 confluence whoami
 confluence searchContent --cql 'space = "DEV" AND text ~ "API"'
 confluence getContent --id 123456
+confluence getComments --id 123456
+confluence addComment --id 123456 --body 'LGTM' --confirm true
 confluence listRestApis --group content
 confluence listRestApis --group content --limit 20
 confluence callRestApi --method GET --path '/content/{id}' --pathParams '{"id":"123456"}' --query '{"expand":"body.storage,version"}'
@@ -98,9 +102,9 @@ confluence listAttachments --id 123456
 confluence uploadAttachment --id 123456 --file docs/a.png --confirm true
 confluence report --period day
 confluence report --period week --space DEV --limit 50
-confluence getPageSnapshot 12345
+confluence getPageSnapshot --id 12345
 confluence searchContent --cql 'space = "DEV"' --output normal
-confluence getContent 12345 --output verbose
+confluence getContent --id 12345 --output verbose
 
 # URL 解析（显式 + 隐式入口）
 confluence urlParse --url 'https://cf.cloudglab.cn/pages/viewpage.action?pageId=5278156'
@@ -117,11 +121,11 @@ CLI 默认输出针对 Agent / Skill 优化：单行不缩进 JSON，handler 返
 # 三档模式
 confluence list --output compact          # 默认：数组 >20 截前 20；大字符串截前 600 + …；不注入 meta
 confluence listRestApis --output normal   # 不裁剪；自动抽 source/partial/page/limit/total/scanned 组成 meta
-confluence getContent 12345 --output verbose  # 原样返回（单行）
+confluence getContent --id 12345 --output verbose  # 原样返回（单行）
 
 # 短链路 Agent 探测
 confluence findContent --title "Foo" --space DEV
-confluence getPageSnapshot 12345          # 5 个并行 GET 一次拿到页面完整画像
+confluence getPageSnapshot --id 12345     # 5 个并行 GET 一次拿到页面完整画像
 confluence report --period day            # 列今天的日报
 ```
 
