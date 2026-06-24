@@ -1,9 +1,9 @@
 import type { JsonContentResult } from "../types/common.js";
 
 /**
- * 三档 output mode,默认 `compact`,对齐 zentao-cli 的 AI 优化策略。
+ * 三档 output mode,默认 `compact`。
  *
- * - compact:数组 >20 截前 20、大字符串 >600 截前 600;不注入 meta;**单行 JSON**(默认,最省 token)
+ * - compact:紧凑 JSON,不裁剪;不注入 meta;**单行 JSON**(默认)
  * - normal :不裁剪;从结果里抽取 `source/partial/page/limit/total/scanned/durationMs/cacheHit/fallbackUsed` 进 `meta`;**单行 JSON**
  * - verbose:原样返回;**单行 JSON**(不缩进,跨 CLI 一致)
  *
@@ -14,10 +14,6 @@ export type OutputMode = "compact" | "normal" | "verbose";
 
 let currentOutputMode: OutputMode = "compact";
 
-const ARRAY_LIMIT = 20;
-const STRING_LIMIT = 600;
-
-const LARGE_STRING_KEYS = ["content", "data", "raw", "html", "text", "message"] as const;
 const META_KEYS = [
   "source",
   "partial",
@@ -53,32 +49,7 @@ export function normalizePayload(value: unknown, mode: OutputMode): unknown {
 }
 
 function normalizeCompactPayload(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.length <= ARRAY_LIMIT
-      ? value
-      : { total: value.length, items: value.slice(0, ARRAY_LIMIT) };
-  }
-  if (!isPlainObject(value)) return value;
-
-  const record = value as Record<string, unknown>;
-  const compact: Record<string, unknown> = {};
-  for (const key of Object.keys(record)) {
-    if (key === "items" && Array.isArray(record.items)) {
-      const items = record.items as unknown[];
-      compact.items = items.length <= ARRAY_LIMIT ? items : items.slice(0, ARRAY_LIMIT);
-      continue;
-    }
-    if (
-      (LARGE_STRING_KEYS as readonly string[]).includes(key) &&
-      typeof record[key] === "string" &&
-      (record[key] as string).length > STRING_LIMIT
-    ) {
-      compact[key] = `${(record[key] as string).slice(0, STRING_LIMIT)}…`;
-      continue;
-    }
-    compact[key] = record[key];
-  }
-  return compact;
+  return value;
 }
 
 function normalizeNormalPayload(value: unknown): unknown {

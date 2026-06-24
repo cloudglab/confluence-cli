@@ -15,10 +15,10 @@
 
 ### 输出模式（默认 `compact`）
 
-所有 handler 返回 JSON 时都会按当前全局 mode 裁剪，单行不缩进（默认 AI 最省 token）。
+所有 handler 返回 JSON 时都会按当前全局 mode 输出单行 JSON，但**不裁剪任何字段或数组**。
 
-- `compact`（默认）：数组 >20 截前 20 + 标记 `total`；`content` / `data` / `raw` / `html` / `text` / `message` 字符串 >600 截前 600 + `…`；不注入 `meta`。**适合 Agent 首轮探测**。
-- `normal` ：不裁剪；自动从结果里抽取 `source` / `partial` / `page` / `limit` / `total` / `scanned` / `durationMs` / `cacheHit` / `fallbackUsed` 组成 `meta`。**适合分页元信息查询**。
+- `compact`（默认）：紧凑 JSON；不注入 `meta`。**适合 Agent 首轮探测**。
+- `normal` ：自动从结果里抽取 `source` / `partial` / `page` / `limit` / `total` / `scanned` / `durationMs` / `cacheHit` / `fallbackUsed` 组成 `meta`。**适合分页元信息查询**。
 - `verbose`：原样返回（单行）；不注入 `meta`。**适合全字段排查**。
 
 切换方式：
