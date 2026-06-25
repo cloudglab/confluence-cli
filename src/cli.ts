@@ -231,6 +231,10 @@ function parseCli(argv: string[]): { command?: string; commandArgs: string[]; ro
 }
 
 function normalizeCommandAlias(command: string | undefined, args: string[]): { command: string | undefined; consumedArgs: number } {
+  if (command === "--version" || command === "-v") {
+    return { command: "version", consumedArgs: 0 };
+  }
+
   if (command === "who" && args[0] === "am" && args[1] === "i") {
     return { command: "whoami", consumedArgs: 2 };
   }
