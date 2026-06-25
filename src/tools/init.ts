@@ -19,7 +19,7 @@ export function registerInitTools(registry: CliRegistry): void {
         ? normalizeConfig({ url: input.url, personalToken: input.pat, username: input.username, password: input.password })
         : loadConfluenceConfig();
 
-      if (input.save) saveConfig(config);
+      if (input.save) await saveConfig(config);
 
       // 验证连接有效
       const api = new ConfluenceApi(config);

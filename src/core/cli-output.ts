@@ -25,8 +25,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   convertMermaidToDrawio: "将 Mermaid 图转换为 draw.io XML",
   generateMarkMetadata: "生成 Markdown 页面元数据",
   urlParse: "解析 Confluence 网页 URL 为结构化意图",
-  request: "发送原始 Confluence REST 请求",
-  searchSpace: "搜索 Confluence 空间",
+  listRestApis: "列出 Confluence 7.13.7 官方 REST 端点模板",
+  callRestApi: "按官方端点模板调用原始 Confluence REST 请求",
   listSpaces: "列出 Confluence 空间",
   getSpace: "获取空间详情",
   getCurrentUser: "输出当前账号原始资料",
@@ -35,12 +35,10 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   searchContent: "使用 CQL 搜索内容",
   getContent: "获取页面或博客内容",
   getPageSnapshot: "单次拿到页面快照(focus + body 预览 + labels + comments + attachments + 子页)",
-  createContent: "创建 Confluence 内容",
-  updateContent: "更新 Confluence 内容",
   deleteContent: "删除 Confluence 内容",
   addLabels: "添加内容标签",
-  removeLabel: "移除内容标签",
-  listLabels: "列出内容标签",
+  deleteLabel: "移除内容标签",
+  getLabels: "列出内容标签",
   listAttachments: "列出页面附件",
   uploadAttachment: "上传页面附件",
   downloadAttachment: "下载页面附件",
@@ -260,7 +258,7 @@ function buildCommandGroups(commandNames: string[]): CommandListGroup[] {
     { title: "上传 / 下载 / 附件", match: (name) => /Upload|Download|Attachment|upload|download/.test(name), commands: [] },
     { title: "空间 / 标签", match: (name) => /Space|Label/.test(name), commands: [] },
     { title: "转换 / 元数据", match: (name) => /convert|generate|Metadata|Markdown|Mermaid|Drawio/.test(name), commands: [] },
-    { title: "底层 REST", match: (name) => ["request"].includes(name), commands: [] },
+    { title: "底层 REST", match: (name) => ["callRestApi", "listRestApis"].includes(name), commands: [] },
     { title: "其他", match: () => true, commands: [] },
   ];
 
@@ -389,8 +387,13 @@ function describeParams(schema: ZodRawShape): string[] {
 
 function describeParam(name: string, schema: ZodTypeAny): string {
   const unwrapped = unwrapShapeSchema(schema);
-  const isOptional = unwrapped.isOptional();
-  const defaultValue = unwrapped instanceof z.ZodDefault ? formatDefaultValue((unwrapped._def as { defaultValue: () => unknown }).defaultValue()) : undefined;
+  // isOptional / 默认值必须在**原始 schema**上判断:unwrapShapeSchema 会剥掉
+  // ZodOptional / ZodDefault,导致内层 schema 的 isOptional() 必为 false、
+  // 也拿不到 defaultValue,从而把所有 .optional() / .default() 参数误报成 required。
+  const isOptional = schema.isOptional();
+  const defaultValue = schema instanceof z.ZodDefault
+    ? formatDefaultValue((schema._def as { defaultValue: () => unknown }).defaultValue())
+    : undefined;
   const description = (schema as { description?: string }).description;
   const parts = [`--${name} ${describeZodType(unwrapped)}`, isOptional ? "optional" : "required"];
 

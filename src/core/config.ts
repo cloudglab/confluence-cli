@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { ConfluenceConfig } from "../types/common.js";
@@ -103,10 +104,12 @@ function normalizeOptionalValue(value: string | undefined): string | undefined {
   return trimmed === "" ? undefined : trimmed;
 }
 
-export function saveConfig(config: Partial<ConfluenceConfig>): void {
+export async function saveConfig(config: Partial<ConfluenceConfig>): Promise<void> {
   const normalized = normalizeConfig(config);
-  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
-  writeFileSync(CONFIG_FILE, `${JSON.stringify(normalized, null, 2)}\n`, { mode: 0o600 });
+  // mkdir recursive 不会因目录已存在而失败,省掉 existsSync 预检;
+  // 改用 fs/promises 异步写,避免阻塞 CLI 主线程(对齐 zentao-cli)。
+  await mkdir(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  await writeFile(CONFIG_FILE, `${JSON.stringify(normalized, null, 2)}\n`, { mode: 0o600 });
 }
 
 export function maskConfig(config: ConfluenceConfig): ConfluenceConfig {

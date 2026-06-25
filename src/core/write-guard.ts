@@ -63,6 +63,13 @@ export function getUnsupportedWriteDiagnostic(input: WriteGuardInput, diagnostic
   };
 }
 
+/**
+ * 写操作硬校验:命中不支持动作 / 全局禁写 / 缺 confirm 任一即抛错。
+ *
+ * @internal 仅测试与外部脚本消费。CLI handler 走 {@link previewOrAssertWriteAllowed}
+ * (返回诊断对象而非抛错,便于 Agent 拿到 payload 预览)。本函数保留导出是为了
+ * inline import 单测能断言 throw 行为。不要在 handler 里直接调用。
+ */
 export function assertWriteAllowed(input: WriteGuardInput): void {
   const unsupportedReason = UNSUPPORTED_WRITE_ACTIONS[input.action];
   if (unsupportedReason) {

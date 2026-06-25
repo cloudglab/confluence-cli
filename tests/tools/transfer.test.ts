@@ -11,6 +11,8 @@ describe("transfer tools", () => {
     const execFileSync = vi.fn();
     const writeFileSync = vi.fn();
     const mkdirSync = vi.fn();
+    const mkdtempSync = vi.fn(() => "/tmp/confluence-cli-test");
+    const unlinkSync = vi.fn();
     const existsSync = vi.fn((filePath: string) => filePath.endsWith("/bm"));
     const readFileSync = vi.fn((filePath: string) => {
       if (filePath === "/tmp/demo.md") {
@@ -20,7 +22,7 @@ describe("transfer tools", () => {
     });
 
     vi.doMock("node:child_process", () => ({ execFileSync }));
-    vi.doMock("node:fs", () => ({ existsSync, mkdirSync, readFileSync, writeFileSync }));
+    vi.doMock("node:fs", () => ({ existsSync, mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync }));
     vi.doMock("node:os", () => ({ tmpdir: () => "/tmp" }));
     vi.doMock("../../src/core/config.js", () => ({ loadConfluenceConfig: vi.fn(() => ({ url: "https://confluence.example.com" })) }));
 
@@ -40,18 +42,25 @@ describe("transfer tools", () => {
     expect(output.preview).toBe(true);
     expect(output.payload.representation).toBe("storage");
     expect(output.payload.generatedFiles).toHaveLength(1);
-    expect(writeFileSync).toHaveBeenCalledWith("/tmp/confluence-cli/Demo-mermaid-1.mmd", "graph TD\n  A-->B", "utf8");
+    // P0-4:每次渲染用 mkdtempSync 建私有子目录,不再共享 /tmp/confluence-cli
+    expect(mkdtempSync).toHaveBeenCalledWith("/tmp/confluence-cli-");
+    expect(writeFileSync).toHaveBeenCalledWith("/tmp/confluence-cli-test/Demo-mermaid-1.mmd", "graph TD\n  A-->B", "utf8");
+    // P0-3:execFileSync 带 timeout + killSignal,防止渲染器无限挂起
     expect(execFileSync).toHaveBeenCalledWith(
       expect.stringContaining("bm"),
-      ["render", "/tmp/confluence-cli/Demo-mermaid-1.mmd", "-o", "/tmp/confluence-cli/Demo-mermaid-1.png", "--json", "--scale", "3"],
-      { stdio: "pipe" },
+      ["render", "/tmp/confluence-cli-test/Demo-mermaid-1.mmd", "-o", "/tmp/confluence-cli-test/Demo-mermaid-1.png", "--json", "--scale", "3"],
+      { stdio: "pipe", timeout: 30_000, killSignal: "SIGTERM" },
     );
+    // P0-3:.mmd 输入文件在 finally 里清理
+    expect(unlinkSync).toHaveBeenCalledWith("/tmp/confluence-cli-test/Demo-mermaid-1.mmd");
   });
 
   it("fails fast with guidance when Mermaid init header is present", async () => {
     const execFileSync = vi.fn();
     const writeFileSync = vi.fn();
     const mkdirSync = vi.fn();
+    const mkdtempSync = vi.fn(() => "/tmp/confluence-cli-test");
+    const unlinkSync = vi.fn();
     const existsSync = vi.fn((filePath: string) => filePath.endsWith("/bm"));
     const readFileSync = vi.fn((filePath: string) => {
       if (filePath === "/tmp/demo.md") {
@@ -61,7 +70,7 @@ describe("transfer tools", () => {
     });
 
     vi.doMock("node:child_process", () => ({ execFileSync }));
-    vi.doMock("node:fs", () => ({ existsSync, mkdirSync, readFileSync, writeFileSync }));
+    vi.doMock("node:fs", () => ({ existsSync, mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync }));
     vi.doMock("node:os", () => ({ tmpdir: () => "/tmp" }));
     vi.doMock("../../src/core/config.js", () => ({ loadConfluenceConfig: vi.fn(() => ({ url: "https://confluence.example.com" })) }));
 
@@ -77,6 +86,8 @@ describe("transfer tools", () => {
         confirm: false,
       }),
     ).rejects.toThrow("当前内置渲染器不支持该主题配置");
+    // init 头在渲染前就抛错,不会写 .mmd 也不会调渲染器
+    expect(writeFileSync).not.toHaveBeenCalled();
     expect(execFileSync).not.toHaveBeenCalled();
   });
 });

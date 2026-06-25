@@ -26,7 +26,7 @@
 ```bash
 pnpm dev:reader --output compact searchContent --cql '...'
 pnpm dev:reader --output normal  listRestApis --limit 10
-pnpm dev:reader --output verbose getContent 12345
+pnpm dev:reader --output verbose getContent --id 12345
 ```
 
 错误用法直接抛错并给出提示：
@@ -43,8 +43,8 @@ pnpm dev:reader --output verbose getContent 12345
 ### 短链路调用模板
 
 - 找一篇页面：`pnpm dev:reader findContent --title "Foo" --space DEV`
-- 拿到正文：`pnpm dev:reader getContent 12345 --expand body.storage,version,metadata.labels`
-- 单次拿到页面快照（focus + body + labels + comments + attachments + 子页）：`pnpm dev:reader getPageSnapshot 12345`
+- 拿到正文：`pnpm dev:reader getContent --id 12345 --expand body.storage,version,metadata.labels`
+- 单次拿到页面快照（focus + body + labels + comments + attachments + 子页）：`pnpm dev:reader getPageSnapshot --id 12345`
 - 列最近日报：`pnpm dev:reader report --period day`
 - 跨页搜：`pnpm dev:reader searchContent --cql 'space = "DEV" AND text ~ "API"' --limit 10`
 

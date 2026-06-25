@@ -218,6 +218,14 @@ export class ConfluenceApi {
     return this.http.getBuffer(downloadPath);
   }
 
+  /**
+   * 流式下载附件到本地文件,避免大附件(~500MB)全量进内存。
+   * 调用方负责确保 destPath 所在目录已存在。
+   */
+  async downloadAttachmentToFile(downloadPath: string, destPath: string): Promise<{ headers: Record<string, unknown> }> {
+    return this.http.downloadToFile(downloadPath, destPath);
+  }
+
   listSpaces(limit = 25): Promise<ConfluencePage<{ key: string; name: string }>> {
     return this.http.get("/space", { limit });
   }

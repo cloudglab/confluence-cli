@@ -119,7 +119,7 @@ CLI 默认输出针对 Agent / Skill 优化：单行不缩进 JSON，handler 返
 
 ```bash
 # 三档模式
-confluence list --output compact          # 默认：数组 >20 截前 20；大字符串截前 600 + …；不注入 meta
+confluence list --output compact          # 默认：不裁剪任何字段或数组；不注入 meta
 confluence listRestApis --output normal   # 不裁剪；自动抽 source/partial/page/limit/total/scanned 组成 meta
 confluence getContent --id 12345 --output verbose  # 原样返回（单行）
 

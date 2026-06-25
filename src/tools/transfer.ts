@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { z } from "zod";
@@ -9,6 +9,8 @@ import { loadConfluenceConfig } from "../core/config.js";
 import { previewOrAssertWriteAllowed } from "../core/write-guard.js";
 import type { ConfluenceConfig } from "../types/common.js";
 import { markdownToStorage, parseMarkdown, postProcessStorageHtml } from "../utils/markdown.js";
+import { escapeXml } from "../utils/markfluence/utils.js";
+import { safeFileName } from "../utils/fs-safe.js";
 import { jsonResult } from "../utils/result.js";
 
 export function registerTransferTools(registry: CliRegistry): void {
@@ -167,12 +169,9 @@ function replaceMermaidFences(markdown: string, pageTitle: string, sourceFile: s
         inMermaid = true;
         buffer = [];
       } else {
-        const mermaidSource = buffer.join("\n").trim();
-        const generated = createMermaidFile(mermaidSource, pageTitle, sourceFile, index, mermaidMode);
-        generatedFiles.push(generated);
-        output.push(generated.marker);
-        index += 1;
-        inMermaid = false;
+        // 嵌套的 ```mermaid 围栏:视作内嵌代码块原样保留在 mermaid 源里,
+        // 不当作关闭符(避免误截断)。
+        buffer.push(line);
       }
       continue;
     }
@@ -247,10 +246,6 @@ function buildTocMacro(maxLevel?: number): string {
   return macros.join("");
 }
 
-function escapeXml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
-}
-
 async function uploadAttachmentFiles(api: ConfluenceApi, pageId: string, files: string[], forceReupload: boolean): Promise<Array<{ file: string; action: string; result: unknown }>> {
   if (files.length === 0) return [];
   const existing = forceReupload ? await api.listAttachments(pageId, 100) : undefined;
@@ -281,7 +276,7 @@ async function downloadPageToDir(
   id: string,
   targetDir: string,
   options: { saveHtml: boolean; downloadAttachments: boolean; downloadChildren: boolean },
-): Promise<{ page: { id: string; title: string }; markdownPath: string; htmlPath?: string; attachmentPaths: string[]; children: unknown[] }> {
+): Promise<{ page: { id: string; title: string }; markdownPath: string; htmlPath?: string; attachmentPaths: string[]; children: unknown[]; childPagesTruncated: boolean }> {
   const page = await api.getContent(id, "body.storage,version,space,ancestors,metadata.labels");
   const safeTitle = safeFileName(page.title);
   const body = page.body?.storage?.value ?? "";
@@ -291,8 +286,10 @@ async function downloadPageToDir(
   if (htmlPath) writeFileSync(htmlPath, body);
 
   const attachmentPaths = options.downloadAttachments ? await downloadPageAttachments(api, page.id, join(targetDir, `${safeTitle}_attachments`)) : [];
-  const children = options.downloadChildren ? await downloadChildren(api, config, page.id, join(targetDir, `${safeTitle}_Children`), options) : [];
-  return { page: { id: page.id, title: page.title }, markdownPath, htmlPath, attachmentPaths, children };
+  const childrenResult = options.downloadChildren
+    ? await downloadChildren(api, config, page.id, join(targetDir, `${safeTitle}_Children`), options)
+    : { items: [], truncated: false };
+  return { page: { id: page.id, title: page.title }, markdownPath, htmlPath, attachmentPaths, children: childrenResult.items, childPagesTruncated: childrenResult.truncated };
 }
 
 async function downloadPageAttachments(api: ConfluenceApi, pageId: string, targetDir: string): Promise<string[]> {
@@ -310,21 +307,23 @@ async function downloadPageAttachments(api: ConfluenceApi, pageId: string, targe
 async function downloadAttachment(api: ConfluenceApi, attachment: ConfluenceAttachment, targetDir: string): Promise<string | undefined> {
   if (!attachment._links?.download) return undefined;
   const outputPath = join(targetDir, safeFileName(attachment.title));
-  const downloaded = await api.downloadAttachment(attachment._links.download);
-  writeFileSync(outputPath, downloaded.data);
+  // 流式下载,避免大附件全量进内存(对齐 http.downloadToFile)。
+  await api.downloadAttachmentToFile(attachment._links.download, outputPath);
   return outputPath;
 }
 
-async function downloadChildren(api: ConfluenceApi, config: ConfluenceConfig, pageId: string, targetDir: string, options: { saveHtml: boolean; downloadAttachments: boolean; downloadChildren: boolean }): Promise<unknown[]> {
+async function downloadChildren(api: ConfluenceApi, config: ConfluenceConfig, pageId: string, targetDir: string, options: { saveHtml: boolean; downloadAttachments: boolean; downloadChildren: boolean }): Promise<{ items: unknown[]; truncated: boolean }> {
   const children = await api.getChildren(pageId, "page", "body.storage,version,space", 100);
-  if (children.results.length === 0) return [];
+  if (children.results.length === 0) return { items: [], truncated: false };
   mkdirSync(targetDir, { recursive: true });
   const childOptions = { ...options, downloadChildren: false };
   const results: unknown[] = [];
   for (const child of children.results) {
     results.push(await downloadPageToDir(api, config, child.id, targetDir, childOptions));
   }
-  return results;
+  // getChildren limit=100 是静默截断:用服务端 size 标记是否还有更多子页未取。
+  const totalSize = typeof children.size === "number" ? children.size : children.results.length;
+  return { items: results, truncated: totalSize > children.results.length };
 }
 
 function markdownForPage(config: ConfluenceConfig, page: ConfluenceContent, body: string): string {
@@ -401,6 +400,12 @@ function replaceMermaidInHtml(html: string, pageTitle: string, sourceFile: strin
       buffer = [];
       continue;
     }
+    if (fence && inMermaid) {
+      // 嵌套的 ```mermaid 围栏:视作内嵌代码块原样保留在 mermaid 源里,
+      // 不当作关闭符(避免误截断)。
+      buffer.push(line);
+      continue;
+    }
     if (inMermaid && /^```\s*$/.test(line)) {
       const source = buffer.join("\n").trim();
       if (source) {
@@ -425,9 +430,11 @@ function replaceMermaidInHtml(html: string, pageTitle: string, sourceFile: strin
 function createMermaidFile(mermaidSource: string, pageTitle: string, sourceFile: string, idx: number, renderKind: MermaidRenderKind): GeneratedMermaidFile {
   const attachmentName = `${safeFileName(pageTitle || basename(sourceFile, extname(sourceFile)))}-mermaid-${idx + 1}.${renderKind}`;
   const marker = `MERMAID_IMAGE_PLACEHOLDER_${idx}`;
-  const outputDir = join(tmpdir(), "confluence-cli");
-  mkdirSync(outputDir, { recursive: true });
-  const filePath = join(outputDir, attachmentName);
+  // 每次渲染用 mkdtempSync 建私有子目录,避免:
+  // 1) 同主机多用户同名页面写同一文件(共享 tmpdir/confluence-cli 路径)
+  // 2) 同用户连续两次上传互相覆盖半成品
+  const workDir = mkdtempSync(join(tmpdir(), "confluence-cli-"));
+  const filePath = join(workDir, attachmentName);
   renderMermaidFile(mermaidSource, filePath, renderKind);
   return { marker, filePath, attachmentName, renderKind };
 }
@@ -446,10 +453,24 @@ function renderMermaidFile(mermaidSource: string, outputFile: string, renderKind
     args.push("--scale", "3");
   }
   try {
-    execFileSync(renderer, args, { stdio: "pipe" });
+    // timeout 防止 bm 渲染器无限挂起;killSignal 让超时后能被正常终止。
+    execFileSync(renderer, args, { stdio: "pipe", timeout: 30_000, killSignal: "SIGTERM" });
   } catch (error) {
+    // 渲染失败时清理半成品输出文件,避免下次被当成已渲染产物误用。
+    try {
+      unlinkSync(outputFile);
+    } catch {
+      // 输出文件可能根本没生成,忽略清理失败
+    }
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to render Mermaid as ${renderKind} with beautiful-mermaid-cli: ${message}`);
+  } finally {
+    // .mmd 输入文件始终清理,避免 tmpdir 堆积。
+    try {
+      unlinkSync(inputFile);
+    } catch {
+      // finally 里不抛
+    }
   }
 }
 
@@ -463,8 +484,4 @@ function resolveBeautifulMermaidBin(): string {
   const found = candidates.find((candidate) => existsSync(candidate));
   if (found) return found;
   return `bm${extension}`;
-}
-
-function safeFileName(value: string): string {
-  return value.replace(/[\\/:*?"<>|]/g, "_");
 }

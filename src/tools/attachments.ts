@@ -1,10 +1,11 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { z } from "zod";
 import type { ConfluenceAttachment } from "../api/index.js";
 import { getApi } from "../core/api-provider.js";
 import type { CliRegistry } from "../core/cli-registry.js";
 import { previewOrAssertWriteAllowed } from "../core/write-guard.js";
+import { safeFileName } from "../utils/fs-safe.js";
 import { jsonResult, textResult } from "../utils/result.js";
 
 export function registerAttachmentTools(registry: CliRegistry): void {
@@ -55,8 +56,8 @@ export function registerAttachmentTools(registry: CliRegistry): void {
       if (!downloadPath) throw new Error("Attachment has no download link.");
       mkdirSync(targetDir, { recursive: true });
       const outputPath = join(targetDir, safeFileName(attachment.title));
-      const downloaded = await api.downloadAttachment(downloadPath);
-      writeFileSync(outputPath, downloaded.data);
+      // 流式下载,避免大附件全量进内存(对齐 http.downloadToFile)。
+      await api.downloadAttachmentToFile(downloadPath, outputPath);
       return textResult(outputPath);
     },
     "Download one page attachment by id or title",
@@ -65,8 +66,4 @@ export function registerAttachmentTools(registry: CliRegistry): void {
 
 function matchesAttachment(attachment: ConfluenceAttachment, attachmentId?: string, title?: string): boolean {
   return (attachmentId !== undefined && attachment.id === attachmentId) || (title !== undefined && attachment.title === title);
-}
-
-function safeFileName(value: string): string {
-  return value.replace(/[\\/:*?"<>|]/g, "_");
 }

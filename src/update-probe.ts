@@ -27,7 +27,8 @@ export async function runDailyUpdateProbe(commandName?: string): Promise<void> {
 
     if (state.lastCheckedDate === today) return;
 
-    await writeUpdateCheckState({ ...state, lastCheckedDate: today, currentVersion: VERSION });
+    // 不在后台 check 启动前就写 lastCheckedDate:让子进程成功(code 0)后再落盘,
+    // 避免 npm 失败/挂起却标记今日已检查,导致整天不再重试。
     triggerBackgroundVersionCheck();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -89,10 +90,16 @@ function triggerBackgroundVersionCheck(): void {
       stdio: ['ignore', 'pipe', 'ignore'],
     });
 
+    // 30s 兜底超时:npm view 可能因网络问题无限挂起,超时后 SIGKILL 强杀,
+    // 让子进程及时退出,避免堆积。
+    const timeout = setTimeout(() => { try { npm.kill('SIGKILL'); } catch {} }, 30_000);
+    timeout.unref();
+
     let stdout = '';
     npm.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
 
     npm.on('close', (code) => {
+      clearTimeout(timeout);
       if (code !== 0) return;
       const latestVersion = stdout.trim();
       if (!latestVersion) return;
@@ -108,31 +115,6 @@ function triggerBackgroundVersionCheck(): void {
     stdio: "ignore",
   });
   child.unref();
-}
-
-async function getLatestPackageVersion(): Promise<string> {
-  const stdout = await runCommandOutput("npm", ["view", PACKAGE_NAME, "version", "--silent"]);
-  const version = stdout.trim();
-  if (!version) throw new Error("npm view 没有返回最新版本号");
-  return version;
-}
-
-function runCommandOutput(command: string, args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { shell: process.platform === "win32" });
-    let stdout = "";
-    let stderr = "";
-    child.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
-    child.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve(stdout);
-        return;
-      }
-      reject(new Error(`${command} ${args.join(" ")} 执行失败，退出码 ${String(code)}${stderr ? `：${stderr.trim()}` : ""}`));
-    });
-  });
 }
 
 function isNewerVersion(latestVersion: string, currentVersion: string): boolean {

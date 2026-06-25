@@ -197,8 +197,11 @@ function parseCli(argv: string[]): { command?: string; commandArgs: string[]; ro
   const inlineRoleIndex = args.findIndex((arg) => arg.startsWith("--role=") || arg.startsWith("-r="));
   if (inlineRoleIndex >= 0) {
     const value = args[inlineRoleIndex].split("=", 2)[1];
+    if (value === undefined || value === "") {
+      throw new Error("--role 需要一个值");
+    }
     if (value !== "full" && value !== "reader" && value !== "writer") {
-      throw new Error(`无效 role: ${value}`);
+      throw new Error(`无效 role: ${value}（需要 full|reader|writer）`);
     }
     role = value;
     args.splice(inlineRoleIndex, 1);
@@ -207,8 +210,11 @@ function parseCli(argv: string[]): { command?: string; commandArgs: string[]; ro
   const roleIndex = args.indexOf("--role");
   if (roleIndex >= 0) {
     const value = args[roleIndex + 1];
+    if (value === undefined) {
+      throw new Error("--role 需要一个值");
+    }
     if (value !== "full" && value !== "reader" && value !== "writer") {
-      throw new Error("--role must be full, reader, or writer");
+      throw new Error(`无效 role: ${value}（需要 full|reader|writer）`);
     }
     role = value;
     args.splice(roleIndex, 2);

@@ -453,7 +453,7 @@ async function ensureValidConfluenceConfig(): Promise<void> {
   const config = loadConfluenceConfig();
   const api = new ConfluenceApi(config);
   await api.getCurrentUser();
-  saveConfig(normalizeConfig(config));
+  await saveConfig(normalizeConfig(config));
 }
 
 async function runStep(title: string, command: string, args: string[]): Promise<void> {
@@ -463,7 +463,7 @@ async function runStep(title: string, command: string, args: string[]): Promise<
 
 function runCommand(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { shell: process.platform === "win32", env: createInstallEnv() });
+    const child = spawn(command, spawnArgs(args), { shell: process.platform === "win32", env: createInstallEnv() });
     let stderr = "";
     child.stdout?.pipe(process.stdout);
     child.stderr?.on("data", (chunk: Buffer) => {
@@ -483,7 +483,7 @@ function runCommand(command: string, args: string[]): Promise<void> {
 
 function runCommandOutput(command: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { shell: process.platform === "win32", env: createInstallEnv() });
+    const child = spawn(command, spawnArgs(args), { shell: process.platform === "win32", env: createInstallEnv() });
     let stdout = "";
     let stderr = "";
     child.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
@@ -497,6 +497,25 @@ function runCommandOutput(command: string, args: string[]): Promise<string> {
       reject(new Error(`${command} ${args.join(" ")} 执行失败，退出码 ${String(code)}${stderr ? `：${stderr.trim()}` : ""}`));
     });
   });
+}
+
+/**
+ * Windows 上 spawn 启用 shell(为了能找到 npm.cmd / npx.cmd),但 Node 不会自动给
+ * 单个参数加引号。含空格或 cmd 元字符的用户路径(如 `--skill-local-path "C:\Users\My Name\..."`)
+ * 会被 cmd.exe 拆分或解释,导致安装失败 / 命令注入。这里在 shell 路径下按 cmd 规则显式转义。
+ * posix 走 shell:false,参数数组直传,不做任何转义。
+ */
+function spawnArgs(args: string[]): string[] {
+  if (process.platform !== "win32") return args;
+  return args.map(quoteWindowsShellArg);
+}
+
+function quoteWindowsShellArg(arg: string): string {
+  if (arg === "") return '""';
+  // 不含需要转义字符的参数原样返回,保持日志可读。
+  if (!/[\s"&|<>^()%!]/.test(arg)) return arg;
+  // cmd.exe:用双引号包裹,内部双引号转义为两个双引号。
+  return `"${arg.replace(/"/g, '""')}"`;
 }
 
 function createInstallEnv(): NodeJS.ProcessEnv {

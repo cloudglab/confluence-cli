@@ -26,9 +26,6 @@ registerConverter<Table>("table", (node, _context, convertChildren) => {
   return `<table>${header}${body}</table>`;
 });
 
-registerConverter<TableRow>("tableRow", (node, _context, convertChildren) => `<tr>${convertChildren(node)}</tr>`);
-registerConverter<TableCell>("tableCell", (node, _context, convertChildren) => `<td>${convertChildren(node)}</td>`);
-
 function getAlignStyle(align: string | null | undefined): string | null {
   if (!align) return null;
   return `text-align: ${align}`;
