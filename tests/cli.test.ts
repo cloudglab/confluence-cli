@@ -200,8 +200,12 @@ describe("runCli", () => {
     const { runCli: runCliWithMocks } = await import("../src/cli.js");
     await runCliWithMocks(["who", "am", "i"]);
 
+    // formatWhoami 现在走 zentao-cli 风格的纯文本渲染(对齐 zentao-cli),
+    // 不再输出 JSON。断言关键字段出现在拍平后的多行文本里。
     const lastWrite = String(write.mock.calls.at(-1)?.[0] ?? "");
-    const parsed = JSON.parse(lastWrite.trim());
-    expect(parsed).toMatchObject(currentUser);
+    expect(lastWrite).toContain("当前 Confluence 账号");
+    expect(lastWrite).toContain("显示名：Demo User");
+    expect(lastWrite).toContain("用户名：me");
+    expect(lastWrite).toContain("快捷入口");
   });
 });

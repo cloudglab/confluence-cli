@@ -23,7 +23,7 @@ function mockAxios() {
     post: vi.fn(async () => ({ data: { ok: true } })),
     put: vi.fn(async () => ({ data: { ok: true } })),
     delete: vi.fn(async () => ({ data: { ok: true } })),
-    request: vi.fn(async () => ({ data: { ok: true } })),
+    request: vi.fn(async (_config?: { url?: string }) => ({ data: { ok: true } })),
   };
   const axiosMock = {
     create: vi.fn(() => client),
@@ -64,14 +64,32 @@ describe("ConfluenceHttpClient", () => {
 
   it("sends JSON requests and normalizes axios errors", async () => {
     const { client } = mockAxios();
-    client.request.mockRejectedValueOnce(axiosError(500, { message: "server" }));
+    // 源码改造后,http.post / http.put / http.delete 内部都走 client.request
+    // (对齐 zentao-cli 的统一调用路径)。用 mockImplementation 区分成功 / 失败路径,
+    // 比 mockRejectedValueOnce 更精确地反映两条调用的实际差异。
+    client.request.mockImplementation(async (config: { url?: string } = {}) => {
+      if (config.url === "/bad") throw axiosError(500, { message: "server" });
+      return { data: { ok: true } };
+    });
     const { ConfluenceHttpClient } = await import("../../src/core/http.js");
     const http = new ConfluenceHttpClient(patConfig);
 
     await expect(http.post("/content", { title: "T" })).resolves.toEqual({ ok: true });
-    await expect(http.request("POST", "/bad", {}, { ok: false })).rejects.toThrow("Confluence request failed (500)");
 
-    expect(client.post).toHaveBeenCalledWith("/content", { title: "T" }, { headers: { "Content-Type": "application/json" } });
+    // 适配新的错误结构:normalizeHttpError 现在额外挂 statusCode / responseBody
+    // (对齐 zentao-cli),错误信息格式也带了响应体摘要。
+    let caught: unknown;
+    try {
+      await http.request("POST", "/bad", {}, { ok: false });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toContain("Confluence request failed (500)");
+    expect((caught as { statusCode?: number }).statusCode).toBe(500);
+    expect((caught as { responseBody?: unknown }).responseBody).toEqual({ message: "server" });
+
+    expect(client.request).toHaveBeenCalledWith({ method: "POST", url: "/content", data: { title: "T" }, headers: { "Content-Type": "application/json" } });
     expect(client.request).toHaveBeenCalledWith({ method: "POST", url: "/bad", params: {}, data: { ok: false }, headers: { "Content-Type": "application/json" } });
   });
 
