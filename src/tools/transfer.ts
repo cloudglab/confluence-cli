@@ -14,7 +14,7 @@ import { jsonResult } from "../utils/result.js";
 export function registerTransferTools(registry: CliRegistry): void {
   registry.tool(
     "uploadMarkdown",
-    z.object({
+    {
       file: z.string(),
       id: z.coerce.string().optional(),
       space: z.string().optional(),
@@ -27,7 +27,7 @@ export function registerTransferTools(registry: CliRegistry): void {
       confirm: z.boolean().default(false),
       toc: z.boolean().default(false),
       tocMaxLevel: z.coerce.number().min(1).max(7).optional(),
-    }),
+    },
     async (input) => {
       const representation = input.representation ?? "storage";
       const raw = readFileSync(input.file, "utf8");
@@ -67,7 +67,7 @@ export function registerTransferTools(registry: CliRegistry): void {
 
   registry.tool(
     "uploadHtml",
-    z.object({
+    {
       file: z.string(),
       id: z.coerce.string().optional(),
       space: z.string().optional(),
@@ -79,7 +79,7 @@ export function registerTransferTools(registry: CliRegistry): void {
       confirm: z.boolean().default(false),
       toc: z.boolean().default(false),
       tocMaxLevel: z.coerce.number().min(1).max(7).optional(),
-    }),
+    },
     async (input) => {
       const raw = readFileSync(input.file, "utf8");
       const title = input.title ?? extractTitleFromHtml(raw) ?? basename(input.file, extname(input.file));
@@ -117,13 +117,13 @@ export function registerTransferTools(registry: CliRegistry): void {
 
   registry.tool(
     "downloadPage",
-    z.object({
+    {
       id: z.coerce.string(),
       outputDir: z.string().default("."),
       saveHtml: z.boolean().default(false),
       downloadAttachments: z.boolean().default(false),
       downloadChildren: z.boolean().default(false),
-    }),
+    },
     async ({ id, outputDir, saveHtml, downloadAttachments, downloadChildren }) => {
       const targetDir = outputDir ?? ".";
       const config = loadConfluenceConfig();

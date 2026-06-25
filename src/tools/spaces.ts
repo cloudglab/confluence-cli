@@ -10,7 +10,7 @@ export function registerSpaceTools(registry: CliRegistry): void {
 
   registry.tool(
     "listSpaces",
-    z.object({ limit: z.number().int().positive().max(100).default(25) }),
+    { limit: z.number().int().positive().max(100).default(25) },
     async ({ limit }) => {
       const effectiveLimit = limit ?? 25;
       const data = await getApi().listSpaces(effectiveLimit);
@@ -29,7 +29,7 @@ export function registerSpaceTools(registry: CliRegistry): void {
 
   registry.tool(
     "getSpace",
-    z.object({ spaceKey: z.string() }),
+    { spaceKey: z.string() },
     async ({ spaceKey }) => {
       return jsonResult(await getApi().getSpace(spaceKey));
     },
@@ -38,28 +38,28 @@ export function registerSpaceTools(registry: CliRegistry): void {
 
   registry.tool(
     "getCurrentUser",
-    z.object({}),
+    {},
     getCurrentUser,
     "Get current authenticated Confluence user",
   );
 
   registry.tool(
     "whoami",
-    z.object({}),
+    {},
     getCurrentUser,
     "Show current authenticated Confluence user",
   );
 
   registry.tool(
     "who-am-i",
-    z.object({}),
+    {},
     getCurrentUser,
     "Alias of whoami",
   );
 
   registry.tool(
     "convertContentBody",
-    z.object({ to: z.enum(["storage", "view", "export_view", "styled_view"]), value: z.string(), representation: z.enum(["wiki", "storage", "view"]).default("wiki") }),
+    { to: z.enum(["storage", "view", "export_view", "styled_view"]), value: z.string(), representation: z.enum(["wiki", "storage", "view"]).default("wiki") },
     async ({ to, value, representation }) => {
       return jsonResult(await getApi().convertBody(to, { value, representation: representation ?? "wiki" }));
     },

@@ -103,8 +103,8 @@ export function postProcessStorageHtml(html: string): string {
     .replace(/<pre><code(?: class="language-([^"]+)")?>([\s\S]*?)<\/code><\/pre>/g, (_match, language: string | undefined, code: string) => buildCodeMacro(language, decodeHtml(code)))
     .replace(/<ul>\s*((?:<li><input(?: checked="")? disabled="" type="checkbox">\s*[\s\S]*?<\/li>\s*)+)\s*<\/ul>/g, (_match, items: string) => buildTaskList(items))
     .replace(/<img\s+([^>]*?)\s*\/?>((?:<\/img>)?)/g, (_match, attrs: string) => buildImageMacro(attrs))
-    .replace(/<hr>/g, "<hr />")
-    .replace(/<br\/>/g, "<br />")
+    .replace(/<hr\s*\/?>/gi, "<hr />")
+    .replace(/<br\s*\/?>/gi, "<br />")
     .replace(/<p>\s*<\/p>/g, "")
     .replace(/<p>(MERMAID_DRAWIO_PLACEHOLDER_\d+)<\/p>/g, "<p>$1</p>");
 }

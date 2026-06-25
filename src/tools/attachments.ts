@@ -10,7 +10,7 @@ import { jsonResult, textResult } from "../utils/result.js";
 export function registerAttachmentTools(registry: CliRegistry): void {
   registry.tool(
     "listAttachments",
-    z.object({ id: z.coerce.string(), limit: z.number().int().positive().max(100).default(100) }),
+    { id: z.coerce.string(), limit: z.number().int().positive().max(100).default(100) },
     async ({ id, limit }) => {
       return jsonResult(await getApi().listAttachments(id, limit));
     },
@@ -19,7 +19,7 @@ export function registerAttachmentTools(registry: CliRegistry): void {
 
   registry.tool(
     "uploadAttachment",
-    z.object({ id: z.coerce.string(), file: z.string(), comment: z.string().optional(), minorEdit: z.boolean().default(true), confirm: z.boolean().default(false) }),
+    { id: z.coerce.string(), file: z.string(), comment: z.string().optional(), minorEdit: z.boolean().default(true), confirm: z.boolean().default(false) },
     async ({ id, file, comment, minorEdit, confirm }) => {
       const preview = previewOrAssertWriteAllowed({ action: "uploadAttachment", confirm, payload: { id, file, comment, minorEdit } });
       if (preview) return jsonResult(preview);
@@ -30,7 +30,7 @@ export function registerAttachmentTools(registry: CliRegistry): void {
 
   registry.tool(
     "updateAttachment",
-    z.object({ id: z.coerce.string(), attachmentId: z.coerce.string(), file: z.string(), comment: z.string().optional(), minorEdit: z.boolean().default(true), confirm: z.boolean().default(false) }),
+    { id: z.coerce.string(), attachmentId: z.coerce.string(), file: z.string(), comment: z.string().optional(), minorEdit: z.boolean().default(true), confirm: z.boolean().default(false) },
     async ({ id, attachmentId, file, comment, minorEdit, confirm }) => {
       const preview = previewOrAssertWriteAllowed({ action: "updateAttachment", confirm, payload: { id, attachmentId, file, comment, minorEdit } });
       if (preview) return jsonResult(preview);
@@ -41,8 +41,11 @@ export function registerAttachmentTools(registry: CliRegistry): void {
 
   registry.tool(
     "downloadAttachment",
-    z.object({ id: z.coerce.string(), attachmentId: z.coerce.string().optional(), title: z.string().optional(), outputDir: z.string().default(".") }).refine((input) => input.attachmentId || input.title, "Provide attachmentId or title"),
+    { id: z.coerce.string(), attachmentId: z.coerce.string().optional(), title: z.string().optional(), outputDir: z.string().default(".") },
     async ({ id, attachmentId, title, outputDir }) => {
+      if (!attachmentId && !title) {
+        throw new Error("Provide attachmentId or title");
+      }
       const targetDir = outputDir ?? ".";
       const api = getApi();
       const attachments = await api.listAttachments(id, 100);

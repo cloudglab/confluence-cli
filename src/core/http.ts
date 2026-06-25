@@ -1,3 +1,5 @@
+import http from "node:http";
+import https from "node:https";
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import type { RestMethod } from "../api/endpoints.js";
 import type { ConfluenceConfig } from "../types/common.js";
@@ -24,11 +26,23 @@ const GET_CACHE_TTL_MS = 15_000;
 const RETRYABLE_NETWORK_CODES = new Set(["ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ECONNREFUSED", "EPIPE"]);
 const RETRY_DELAY_MS = 100;
 
+/**
+ * Confluence HTTP 客户端。对齐 zentao-cli 的 `ZentaoHttpClient`:
+ *
+ * - GET 15s 缓存(模块级 Map)
+ * - 网络层错误(EAI_AGAIN / ECONNRESET / ...)+ HTTP 401 各重试 1 次
+ * - keep-alive http/https Agent(对齐 zentao-cli)
+ *
+ * 401 重试机制:Confluence 同时支持 PAT (Bearer) 和 Basic Auth,
+ * PAT 模式下"清 token"实际无操作可做(Bearer token 写在构造时的 headers 里),
+ * 仍然重发同请求一次,以保留与 zentao-cli 一致的失败兜底形态;
+ * 如果上层把 Authorization 改为动态注入,可订阅 `clearCredentials` 在重试前重置。
+ */
 export class ConfluenceHttpClient {
   private readonly client: AxiosInstance;
   private readonly getCache = new Map<string, CacheEntry>();
 
-  constructor(config: ConfluenceConfig) {
+  constructor(private readonly config: ConfluenceConfig) {
     this.client = axios.create({
       baseURL: config.apiBaseUrl,
       timeout: 30_000,
@@ -37,7 +51,23 @@ export class ConfluenceHttpClient {
         Accept: "application/json",
         ...(config.authType === "pat" ? { Authorization: `Bearer ${config.personalToken}` } : {}),
       },
+      httpAgent: new http.Agent({ keepAlive: true }),
+      httpsAgent: new https.Agent({ keepAlive: true }),
     });
+  }
+
+  /**
+   * 401 重试前调用。PAT 模式下清 token 等价于 no-op(Bearer 写死在 headers),
+   * Basic 模式下清 auth 字段后,axios 会按当前 config 重新发起 Basic challenge。
+   * 也提供钩子供上层在重试前刷新凭证(如重新加载 ~/.confluence/config.json)。
+   */
+  clearCredentials(): void {
+    if (this.config.authType === "basic") {
+      this.client.defaults.auth = undefined;
+    } else {
+      delete this.client.defaults.headers?.Authorization;
+      delete this.client.defaults.headers?.authorization;
+    }
   }
 
   async get<T>(path: string, params?: Record<string, unknown>): Promise<T> {
@@ -51,43 +81,15 @@ export class ConfluenceHttpClient {
   }
 
   async post<T>(path: string, data: unknown): Promise<T> {
-    const start = Date.now();
-    try {
-      const response = await this.executeWithNetworkRetry<T>(() =>
-        this.client.post<T>(path, data, { headers: { "Content-Type": "application/json" } }),
-      );
-      recordRequest(Date.now() - start, true);
-      return response.data;
-    } catch (error) {
-      recordRequest(Date.now() - start, false);
-      throw normalizeHttpError(error);
-    }
+    return this.executeWithRetry<T>("POST", path, { data, headers: { "Content-Type": "application/json" } });
   }
 
   async put<T>(path: string, data: unknown): Promise<T> {
-    const start = Date.now();
-    try {
-      const response = await this.executeWithNetworkRetry<T>(() =>
-        this.client.put<T>(path, data, { headers: { "Content-Type": "application/json" } }),
-      );
-      recordRequest(Date.now() - start, true);
-      return response.data;
-    } catch (error) {
-      recordRequest(Date.now() - start, false);
-      throw normalizeHttpError(error);
-    }
+    return this.executeWithRetry<T>("PUT", path, { data, headers: { "Content-Type": "application/json" } });
   }
 
   async delete<T>(path: string, params?: Record<string, unknown>): Promise<T> {
-    const start = Date.now();
-    try {
-      const response = await this.executeWithNetworkRetry<T>(() => this.client.delete<T>(path, { params }));
-      recordRequest(Date.now() - start, true);
-      return response.data;
-    } catch (error) {
-      recordRequest(Date.now() - start, false);
-      throw normalizeHttpError(error);
-    }
+    return this.executeWithRetry<T>("DELETE", path, { params });
   }
 
   async request<T>(method: RestMethod, path: string, params?: Record<string, unknown>, data?: unknown): Promise<T> {
@@ -99,7 +101,7 @@ export class ConfluenceHttpClient {
         return cached;
       }
     }
-    return this.executeWithMetrics<T>(method, path, {
+    return this.executeWithRetry<T>(method, path, {
       params,
       data,
       headers: data === undefined ? undefined : { "Content-Type": "application/json" },
@@ -115,13 +117,13 @@ export class ConfluenceHttpClient {
   }
 
   async getBuffer(path: string, params?: Record<string, unknown>): Promise<{ data: Buffer; headers: Record<string, unknown> }> {
-    return this.executeWithMetricsBuffer("GET", path, { params, responseType: "arraybuffer" });
+    return this.executeWithRetryBuffer("GET", path, { params, responseType: "arraybuffer" });
   }
 
   private async multipart<T>(method: "POST" | "PUT", path: string, fields: Record<string, string | boolean | number | undefined>, files: MultipartFile[]): Promise<T> {
     const boundary = `----confluence-cli-${Date.now().toString(16)}`;
     const body = buildMultipartBody(boundary, fields, files);
-    return this.executeWithMetrics<T>(method, path, {
+    return this.executeWithRetry<T>(method, path, {
       data: body,
       headers: {
         "Content-Type": `multipart/form-data; boundary=${boundary}`,
@@ -129,6 +131,44 @@ export class ConfluenceHttpClient {
         "X-Atlassian-Token": "no-check",
       },
     });
+  }
+
+  /**
+   * 网络层错误重试 1 次 + 401 重试 1 次(清 credentials 后再发一次)。
+   */
+  private async executeWithRetry<T>(method: RestMethod, path: string, config: AxiosRequestConfig): Promise<T> {
+    return this.executeWithAuthRetry<T>(
+      method,
+      path,
+      config,
+      () => this.executeWithMetrics<T>(method, path, config),
+    );
+  }
+
+  private async executeWithRetryBuffer(method: RestMethod, path: string, config: AxiosRequestConfig): Promise<{ data: Buffer; headers: Record<string, unknown> }> {
+    return this.executeWithAuthRetry<{ data: Buffer; headers: Record<string, unknown> }>(
+      method,
+      path,
+      config,
+      () => this.executeWithMetricsBuffer(method, path, config),
+    );
+  }
+
+  private async executeWithAuthRetry<T>(
+    _method: RestMethod,
+    _path: string,
+    _config: AxiosRequestConfig,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await run();
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        this.clearCredentials();
+        return run();
+      }
+      throw error;
+    }
   }
 
   private async executeWithMetrics<T>(method: RestMethod, path: string, config: AxiosRequestConfig): Promise<T> {
@@ -164,7 +204,7 @@ export class ConfluenceHttpClient {
 
   /**
    * 网络层错误(`ECONNRESET` / `ETIMEDOUT` / `EAI_AGAIN` / `ECONNREFUSED` / `EPIPE`)
-   * 重试 1 次。HTTP 4xx/5xx 直接抛错,不重试。
+   * 重试 1 次。HTTP 4xx/5xx 直接抛错,不重试(语义明确,交给上层处理)。
    */
   private async executeWithNetworkRetry<T>(action: () => Promise<AxiosResponse<T>>): Promise<AxiosResponse<T>> {
     try {

@@ -9,22 +9,28 @@ import { jsonResult, textResult } from "../utils/result.js";
 export function registerConvertTools(registry: CliRegistry): void {
   registry.tool(
     "convertMarkdownToWiki",
-    z.object({ file: z.string().optional(), text: z.string().optional() }).refine((input) => input.file || input.text, "Provide file or text"),
-    ({ file, text }) => textResult(markdownToWiki(text ?? readFileSync(file!, "utf8"))),
+    { file: z.string().optional(), text: z.string().optional() },
+    ({ file, text }) => {
+      if (!file && !text) {
+        throw new Error("Provide file or text");
+      }
+      return textResult(markdownToWiki(text ?? readFileSync(file!, "utf8")));
+    },
     "Convert Markdown to Confluence Wiki Markup",
   );
 
   registry.tool(
     "convertMermaidToDrawio",
-    z
-      .object({
-        file: z.string().optional(),
-        text: z.string().optional(),
-        output: z.string().optional(),
-        mode: z.enum(["auto", "mermaid", "markdown"]).default("auto"),
-      })
-      .refine((input) => input.file || input.text, "Provide file or text"),
+    {
+      file: z.string().optional(),
+      text: z.string().optional(),
+      output: z.string().optional(),
+      mode: z.enum(["auto", "mermaid", "markdown"]).default("auto"),
+    },
     (input) => {
+      if (!input.file && !input.text) {
+        throw new Error("Provide file or text");
+      }
       const sourceText = input.text ?? readFileSync(input.file!, "utf8");
       const mermaid = extractMermaidSource(sourceText, input.mode ?? "auto", input.file);
       const converted = convertDiagram(mermaid, { from: "mermaid", to: "drawio", layout: { algorithm: "dagre" } });

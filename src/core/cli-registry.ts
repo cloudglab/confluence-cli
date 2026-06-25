@@ -1,5 +1,5 @@
-import { z, type ZodTypeAny } from "zod";
-import type { JsonContentResult, ToolHandler } from "../types/common.js";
+import { z, type ZodRawShape, type ZodTypeAny } from "zod";
+import type { JsonContentResult } from "../types/common.js";
 
 /**
  * 命令元数据,用于帮 Agent 在跑命令前了解代价和后续推荐步骤。
@@ -19,19 +19,30 @@ export interface CommandMetadata {
   idempotent?: boolean;
 }
 
-export interface RegisteredTool<TInput = unknown> {
+/**
+ * 注册命令的类型。`schema` 用 ZodRawShape(直接 `{ key: zodType }`),
+ * 对齐 zentao-cli 的 CliCommandDefinition,去掉 `z.object(...)` 包装。
+ *
+ * - `parseCommandInput` 内部会用 `z.object(schema).strict().parse(...)` 做最终校验,
+ *   把单个字段的类型转换/默认值交还 zod,CLI 层只负责 argv 解析。
+ * - 旧约定(`z.object({...}).refine(...)`)中 `.refine()` 已不再支持;调用方在 handler 里手抛错。
+ */
+export type CliHandler<TInput extends Record<string, unknown> = Record<string, unknown>> =
+  (input: TInput) => Promise<JsonContentResult> | JsonContentResult;
+
+export interface RegisteredTool<TInput extends Record<string, unknown> = Record<string, unknown>> {
   name: string;
   description?: string;
-  schema: z.ZodType<TInput>;
-  handler: ToolHandler<TInput>;
+  schema: ZodRawShape;
+  handler: CliHandler<TInput>;
   metadata?: CommandMetadata;
 }
 
 export interface CliRegistry {
-  tool<TInput>(
+  tool<TShape extends ZodRawShape, TInput extends Record<string, unknown> = Record<string, unknown>>(
     name: string,
-    schema: z.ZodType<TInput>,
-    handler: ToolHandler<TInput>,
+    schema: TShape,
+    handler: CliHandler<TInput & z.infer<z.ZodObject<TShape>>>,
     description?: string,
     metadata?: CommandMetadata,
   ): void;
@@ -42,14 +53,20 @@ export interface CliRegistry {
 export class InMemoryCliRegistry implements CliRegistry {
   private readonly tools = new Map<string, RegisteredTool>();
 
-  tool<TInput>(
+  tool<TShape extends ZodRawShape, TInput extends Record<string, unknown> = Record<string, unknown>>(
     name: string,
-    schema: z.ZodType<TInput>,
-    handler: ToolHandler<TInput>,
+    schema: TShape,
+    handler: CliHandler<TInput & z.infer<z.ZodObject<TShape>>>,
     description?: string,
     metadata?: CommandMetadata,
   ): void {
-    this.tools.set(name, { name, schema, handler: handler as ToolHandler<unknown>, description, metadata });
+    this.tools.set(name, {
+      name,
+      schema,
+      handler: handler as CliHandler,
+      description,
+      metadata,
+    });
   }
 
   get(name: string): RegisteredTool | undefined {
@@ -61,8 +78,36 @@ export class InMemoryCliRegistry implements CliRegistry {
   }
 }
 
-export function parseCommandInput(schema: z.ZodType, args: string[]): unknown {
-  const raw: Record<string, unknown> = {};
+/**
+ * 把 argv 解析成结构化 input。
+ *
+ * 流程:
+ * 1. `parseArgv` 把 `--key=value` / `--key value` / `--flag` 还原成 `{ key: value | true | [...] }`;
+ * 2. 拒绝 schema 外的 key,报"未知参数";
+ * 3. `coerceValue` 把字符串值转成 zod 期望的类型(boolean / number / array / object / union);
+ * 4. `z.object(schema).strict().parse(converted)` 让 zod 接管 z.coerce / 默认值 / 可选性等校验。
+ *
+ * 不再用 `z.object({...}).refine(...)`:`.refine()` 需要调用方在 handler 里手抛错。
+ */
+export function parseCommandInput(schema: ZodRawShape, args: string[]): Record<string, unknown> {
+  const raw = parseArgv(args);
+
+  const unknownKeys = Object.keys(raw).filter((key) => !(key in schema));
+  if (unknownKeys.length > 0) {
+    throw new Error(`未知参数: ${unknownKeys.map((key) => `--${key}`).join(", ")}`);
+  }
+
+  const converted: Record<string, unknown> = {};
+  for (const [key, fieldSchema] of Object.entries(schema)) {
+    if (!(key in raw)) continue;
+    converted[key] = coerceValue(selectValueForSchema(raw[key], fieldSchema), fieldSchema);
+  }
+
+  return z.object(schema).strict().parse(converted) as Record<string, unknown>;
+}
+
+function parseArgv(args: string[]): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
 
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
@@ -80,25 +125,10 @@ export function parseCommandInput(schema: z.ZodType, args: string[]): unknown {
     const value = hasInlineValue ? token.slice(equalsIndex + 1) : hasExplicitValue ? next : true;
 
     if (hasExplicitValue) index += 1;
-    appendArg(raw, key, value);
+    appendArg(result, key, value);
   }
 
-  const objectSchema = unwrapObjectSchema(schema);
-  if (!objectSchema) return schema.parse(raw);
-
-  const shape = objectSchema.shape;
-  const unknownKeys = Object.keys(raw).filter((key) => !(key in shape));
-  if (unknownKeys.length > 0) {
-    throw new Error(`未知参数: ${unknownKeys.map((key) => `--${key}`).join(", ")}`);
-  }
-
-  const converted: Record<string, unknown> = {};
-  for (const [key, fieldSchema] of Object.entries(shape) as Array<[string, ZodTypeAny]>) {
-    if (!(key in raw)) continue;
-    converted[key] = coerceValue(selectValueForSchema(raw[key], fieldSchema), fieldSchema);
-  }
-
-  return schema.parse(converted);
+  return result;
 }
 
 function appendArg(target: Record<string, unknown>, key: string, value: unknown): void {
@@ -125,9 +155,13 @@ function selectValueForSchema(value: unknown, schema: ZodTypeAny): unknown {
 function coerceValue(value: unknown, schema: ZodTypeAny): unknown {
   const unwrapped = unwrapSchema(schema);
 
-  if (unwrapped instanceof z.ZodBoolean) return toBoolean(value);
-  if (unwrapped instanceof z.ZodNumber) return toNumber(value);
-  if (unwrapped instanceof z.ZodString) return typeof value === "string" ? value : String(value);
+  if (unwrapped instanceof z.ZodBoolean) {
+    return toBoolean(value);
+  }
+
+  if (unwrapped instanceof z.ZodNumber) {
+    return toNumber(value);
+  }
 
   if (unwrapped instanceof z.ZodArray) {
     const items: unknown[] = Array.isArray(value)
@@ -154,6 +188,7 @@ function coerceValue(value: unknown, schema: ZodTypeAny): unknown {
         // try next option
       }
     }
+    return value;
   }
 
   return value;
@@ -164,13 +199,8 @@ function parseJsonValue(value: string, label: string): unknown {
     return JSON.parse(value);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`无法解析${label}: ${value}（${message}）`);
+    throw new Error(`无法解析${label}: ${value}(${message})`);
   }
-}
-
-function unwrapObjectSchema(schema: z.ZodType): z.AnyZodObject | undefined {
-  const unwrapped = unwrapSchema(schema as ZodTypeAny);
-  return unwrapped instanceof z.ZodObject ? unwrapped : undefined;
 }
 
 function unwrapSchema(schema: ZodTypeAny): ZodTypeAny {

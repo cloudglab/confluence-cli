@@ -80,7 +80,7 @@ function buildReportCql(input: {
 export function registerContentTools(registry: CliRegistry): void {
   registry.tool(
     "searchContent",
-    z.object({ cql: z.string(), limit: z.number().int().positive().max(100).default(25) }),
+    { cql: z.string(), limit: z.number().int().positive().max(100).default(25) },
     async ({ cql, limit }) => {
       const effectiveLimit = limit ?? 25;
       const data = await getApi().search(cql, effectiveLimit);
@@ -99,7 +99,7 @@ export function registerContentTools(registry: CliRegistry): void {
 
   registry.tool(
     "getContent",
-    z.object({ id: z.coerce.string(), expand: z.string().optional() }),
+    { id: z.coerce.string(), expand: z.string().optional() },
     async ({ id, expand }) => {
       return jsonResult(await getApi().getContent(id, expand));
     },
@@ -108,7 +108,7 @@ export function registerContentTools(registry: CliRegistry): void {
 
   registry.tool(
     "getPageSnapshot",
-    z.object({
+    {
       id: z.coerce.string(),
       bodyPreviewChars: z.number().int().positive().max(20000).default(1500)
         .describe("Max characters of body.storage to include in text.bodyPreview (default 1500)"),
@@ -118,7 +118,7 @@ export function registerContentTools(registry: CliRegistry): void {
         .describe("Max attachments to include in highlights (default 10)"),
       childLimit: z.number().int().nonnegative().max(50).default(10)
         .describe("Max child pages to include in highlights (default 10)"),
-    }),
+    },
     async ({ id, bodyPreviewChars, commentLimit, attachmentLimit, childLimit }) => {
       return jsonResult(
         await getApi().getPageSnapshot({
@@ -135,7 +135,7 @@ export function registerContentTools(registry: CliRegistry): void {
 
   registry.tool(
     "findContent",
-    z.object({ space: z.string().optional(), title: z.string().optional(), type: z.string().default("page"), limit: z.number().int().positive().max(100).default(25), expand: z.string().optional() }),
+    { space: z.string().optional(), title: z.string().optional(), type: z.string().default("page"), limit: z.number().int().positive().max(100).default(25), expand: z.string().optional() },
     async ({ space, title, type, limit, expand }) => {
       const effectiveLimit = limit ?? 25;
       const data = await getApi().findContent({ space, title, type, limit: effectiveLimit, expand });
@@ -154,7 +154,7 @@ export function registerContentTools(registry: CliRegistry): void {
 
   registry.tool(
     "deleteContent",
-    z.object({ id: z.coerce.string(), confirm: z.boolean().default(false) }),
+    { id: z.coerce.string(), confirm: z.boolean().default(false) },
     async ({ id, confirm }) => {
       const preview = previewOrAssertWriteAllowed({ action: "deleteContent", confirm, payload: { id } });
       if (preview) return jsonResult(preview);
@@ -165,7 +165,7 @@ export function registerContentTools(registry: CliRegistry): void {
 
   registry.tool(
     "getPageChildren",
-    z.object({ id: z.coerce.string(), type: z.string().optional(), expand: z.string().default("space,version"), limit: z.number().int().positive().max(100).default(25) }),
+    { id: z.coerce.string(), type: z.string().optional(), expand: z.string().default("space,version"), limit: z.number().int().positive().max(100).default(25) },
     async ({ id, type, expand, limit }) => {
       return jsonResult(await getApi().getChildren(id, type, expand, limit));
     },
@@ -174,7 +174,7 @@ export function registerContentTools(registry: CliRegistry): void {
 
   registry.tool(
     "getComments",
-    z.object({ id: z.coerce.string(), expand: z.string().default("body.storage,version"), limit: z.number().int().positive().max(100).default(25) }),
+    { id: z.coerce.string(), expand: z.string().default("body.storage,version"), limit: z.number().int().positive().max(100).default(25) },
     async ({ id, expand, limit }) => {
       return jsonResult(await getApi().getComments(id, expand, limit));
     },
@@ -183,13 +183,13 @@ export function registerContentTools(registry: CliRegistry): void {
 
   registry.tool(
     "addComment",
-    z.object({
+    {
       id: z.coerce.string(),
       body: z.string(),
       inline: z.string().optional().describe("Selected text on the page to annotate (inline comment)"),
       representation: z.enum(["wiki", "storage"]).default("wiki"),
       confirm: z.boolean().default(false),
-    }),
+    },
     async ({ id, body, inline, representation, confirm }) => {
       const bodyRepresentation = representation ?? "wiki";
       const action = inline ? "addInlineComment" : "addComment";
@@ -207,7 +207,7 @@ export function registerContentTools(registry: CliRegistry): void {
 
   registry.tool(
     "report",
-    z.object({
+    {
       period: z.enum(["day", "week", "month", "quarter", "custom"]).default("day"),
       space: z.string().optional().describe("Restrict to a Confluence space key"),
       type: z.enum(["page", "blogpost", "all"]).default("all"),
@@ -217,7 +217,7 @@ export function registerContentTools(registry: CliRegistry): void {
       start: z.number().int().nonnegative().default(0).describe("Pagination start index"),
       limit: z.number().int().positive().max(250).default(25).describe("Page size (max 250)"),
       expand: z.string().optional().describe("Comma-separated expand fields for /content/search"),
-    }),
+    },
     async ({ period, space, type, creator, from, to, start, limit, expand }) => {
       const effectiveStart = start ?? 0;
       const effectiveLimit = limit ?? 25;

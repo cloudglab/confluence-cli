@@ -2,6 +2,7 @@ import { parseCommandInput } from "./core/cli-registry.js";
 import { looksLikeUrl } from "./core/url-parser.js";
 import {
   BUILTIN_COMMAND_NAMES,
+  formatCommandOutput,
   getBuiltinCommandHelp,
   printCommandHelp,
   printCommandList,
@@ -101,7 +102,10 @@ export async function runCli(argv: string[]): Promise<void> {
   resetMetrics();
   const rawResult = await selected.handler(input);
   const result = appendCommandMeta(rawResult, { ...snapshotMetrics() });
-  process.stdout.write(`${result.content[0]?.text ?? ""}\n`);
+  const rawText = result.content[0]?.text ?? "";
+  // whoami / who-am-i / getCurrentUser 走专用渲染,其他命令保持 JSON 输出
+  const finalText = await formatCommandOutput(command, rawText);
+  process.stdout.write(`${finalText}\n`);
 }
 
 function parseListOptions(args: string[]): { raw: boolean } {

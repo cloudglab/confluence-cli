@@ -26,7 +26,7 @@
     "assets"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsx scripts/generate-manifest.ts && tsc -p tsconfig.json && node scripts/fix-bin-mode.mjs",
+    "build": "rm -rf dist && tsx scripts/generate-manifest.ts && node scripts/copy-skills.mjs && tsc -p tsconfig.json && node scripts/fix-bin-mode.mjs",
     "dev": "tsx src/bin/confluence.ts",
     "dev:reader": "tsx src/bin/confluence.ts --role reader",
     "dev:writer": "tsx src/bin/confluence.ts --role writer",
@@ -34,8 +34,9 @@
     "test": "vitest run --passWithNoTests",
     "lint": "oxlint src",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "coverage": "node scripts/check-coverage.mjs",
     "release:smoke-query": "node scripts/release-query-smoke.mjs",
-    "prepare": "node scripts/prepare.mjs"
+    "prepare": "lefthook install"
   },
   "dependencies": {
     "@whitebite/diagram-converter": "^0.2.0",
@@ -67,5 +68,5 @@
   "publishConfig": {
     "access": "public"
   },
-  "packageManager": "pnpm@9.15.0"
+  "packageManager": "pnpm@10.24.0"
 }

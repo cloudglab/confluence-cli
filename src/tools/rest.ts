@@ -11,7 +11,7 @@ const jsonRecordSchema = z.record(z.unknown());
 export function registerRestTools(registry: CliRegistry): void {
   registry.tool(
     "listRestApis",
-    z.object({ method: z.enum(["GET", "POST", "PUT", "DELETE"]).optional(), group: z.string().optional(), write: z.boolean().optional(), limit: z.number().int().positive().max(500).optional() }),
+    { method: z.enum(["GET", "POST", "PUT", "DELETE"]).optional(), group: z.string().optional(), write: z.boolean().optional(), limit: z.number().int().positive().max(500).optional() },
     ({ method, group, write, limit }) => {
       const endpoints = CONFLUENCE_7_13_7_ENDPOINTS.filter((endpoint) => {
         if (method && endpoint.method !== method) return false;
@@ -26,14 +26,14 @@ export function registerRestTools(registry: CliRegistry): void {
 
   registry.tool(
     "callRestApi",
-    z.object({
+    {
       method: z.enum(["GET", "POST", "PUT", "DELETE"]),
       path: z.string(),
       pathParams: jsonRecordSchema.default({}),
       query: jsonRecordSchema.default({}),
       body: z.unknown().optional(),
       confirm: z.boolean().default(false),
-    }),
+    },
     async (input) => {
       const method = input.method as RestMethod;
       const endpoint = findEndpoint(method, input.path);

@@ -60,4 +60,18 @@ describe("markdown utilities", () => {
     expect(storage).toContain("<thead><tr><th>字段</th><th>含义</th></tr></thead>");
     expect(storage).toContain("<tbody><tr><td>host</td><td>域名</td></tr><tr><td>token</td><td>凭证</td></tr></tbody>");
   });
+
+  it("normalizes html br tags inside markdown table cells for confluence storage", () => {
+    const input = [
+      "| 影响 | 说明 |",
+      "| --- | --- |",
+      "| 对外接口 | 第一行<br>第二行<BR/>第三行<br />第四行 |",
+    ].join("\n");
+
+    const storage = markdownToStorage(input);
+
+    expect(storage).toContain("第一行<br />第二行<br />第三行<br />第四行");
+    expect(storage).not.toContain("<br>");
+    expect(storage).not.toContain("<BR/>");
+  });
 });

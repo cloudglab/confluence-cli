@@ -1,8 +1,9 @@
-import { z } from "zod";
+import { z, type ZodRawShape, type ZodTypeAny } from "zod";
 import { VERSION } from "../version.js";
 import type { Role } from "../types/common.js";
 import { loadChangelogRaw, loadChangelogSections } from "./changelog.js";
 import type { InMemoryCliRegistry } from "./cli-registry.js";
+import { firstString } from "./value.js";
 
 const BUILTIN_DESCRIPTIONS: Record<string, string> = {
   help: "查看总帮助或指定命令参数",
@@ -323,38 +324,98 @@ export async function renderChangelog(options: ChangelogOptions): Promise<string
   return [header, "", ...selected.map((section) => section.content)].join("\n").trimEnd() + "\n";
 }
 
-function describeParams(schema: z.ZodType): string[] {
-  const unwrapped = unwrapSchema(schema);
-  if (!(unwrapped instanceof z.ZodObject)) return [];
-  return Object.entries(unwrapped.shape).map(([key, field]) => describeParam(key, field as z.ZodType));
+/**
+ * whoami / who-am-i / getCurrentUser 命令的专用渲染入口。
+ *
+ * 三者返回的都是 Confluence `/user/current` 的原始 JSON:
+ * - `userName` / `username` / `displayName` / `fullName` / `email` / `_links`
+ *
+ * 设计对齐 zentao-cli 的 `formatWhoami`:把 JSON 拍平成易读的多行文本,
+ * 而不是 jsonResult 的紧凑 JSON。失败时回退到原文(避免破坏 agent 调用)。
+ */
+export async function formatCommandOutput(commandName: string, text: string): Promise<string> {
+  if (commandName !== "whoami" && commandName !== "who-am-i" && commandName !== "getCurrentUser") {
+    return text;
+  }
+
+  try {
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    return formatWhoami(parsed);
+  } catch {
+    return text;
+  }
 }
 
-function describeParam(name: string, schema: z.ZodType): string {
-  const isOptional = schema instanceof z.ZodOptional || schema instanceof z.ZodDefault;
-  const defaultValue = schema instanceof z.ZodDefault ? formatDefaultValue((schema._def as { defaultValue: () => unknown }).defaultValue()) : undefined;
+function formatWhoami(profile: Record<string, unknown>): string {
+  const displayName = firstString(
+    profile.displayName,
+    profile.fullName,
+    profile.userName,
+    profile.username,
+    profile.name,
+  ) ?? "(未识别)";
+  const username = firstString(
+    profile.username,
+    profile.userName,
+    profile.account,
+  ) ?? "-";
+  const email = firstString(profile.email);
+  const userKey = firstString(profile.userKey, profile.key);
+  const type = firstString(profile.type);
+
+  const lines = [
+    `当前 Confluence 账号:`,
+    `  - 显示名：${displayName}`,
+    `  - 用户名：${username}`,
+  ];
+  if (userKey) lines.push(`  - userKey：${userKey}`);
+  if (email) lines.push(`  - 邮箱：${email}`);
+  if (type) lines.push(`  - 类型：${type}`);
+
+  lines.push(
+    "",
+    "快捷入口：",
+    "  - 搜索页面：confluence searchContent --cql '<CQL>'",
+    "  - 列出空间：confluence listSpaces",
+    "  - 读取页面：confluence getContent <pageId>",
+  );
+
+  return lines.join("\n");
+}
+
+function describeParams(schema: ZodRawShape): string[] {
+  return Object.entries(schema).map(([key, field]) => describeParam(key, field as ZodTypeAny));
+}
+
+function describeParam(name: string, schema: ZodTypeAny): string {
+  const unwrapped = unwrapShapeSchema(schema);
+  const isOptional = unwrapped.isOptional();
+  const defaultValue = unwrapped instanceof z.ZodDefault ? formatDefaultValue((unwrapped._def as { defaultValue: () => unknown }).defaultValue()) : undefined;
   const description = (schema as { description?: string }).description;
-  const parts = [`--${name} ${describeZodType(schema)}`, isOptional ? "optional" : "required"];
+  const parts = [`--${name} ${describeZodType(unwrapped)}`, isOptional ? "optional" : "required"];
 
   if (defaultValue !== undefined) parts.push(`default=${defaultValue}`);
   if (description) parts.push(description);
   return parts.join(" | ");
 }
 
-function unwrapSchema(schema: z.ZodType): z.ZodType {
-  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return unwrapSchema(schema.unwrap());
-  if (schema instanceof z.ZodDefault) return unwrapSchema((schema._def as { innerType: z.ZodType }).innerType);
-  if (schema instanceof z.ZodEffects) return unwrapSchema(schema.innerType());
+function unwrapShapeSchema(schema: ZodTypeAny): ZodTypeAny {
+  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return unwrapShapeSchema(schema.unwrap());
+  if (schema instanceof z.ZodDefault) return unwrapShapeSchema((schema._def as { innerType: ZodTypeAny }).innerType);
+  if (schema instanceof z.ZodEffects) return unwrapShapeSchema(schema.innerType());
+  if (schema instanceof z.ZodPipeline) return unwrapShapeSchema(schema._def.out);
   return schema;
 }
 
-function describeZodType(schema: z.ZodType): string {
-  const unwrapped = unwrapSchema(schema);
+function describeZodType(schema: ZodTypeAny): string {
+  const unwrapped = unwrapShapeSchema(schema);
   if (unwrapped instanceof z.ZodString) return "string";
   if (unwrapped instanceof z.ZodNumber) return "number";
   if (unwrapped instanceof z.ZodBoolean) return "boolean";
   if (unwrapped instanceof z.ZodArray) return "array";
   if (unwrapped instanceof z.ZodEnum) return unwrapped.options.join("|");
   if (unwrapped instanceof z.ZodObject) return "json-object";
+  if (unwrapped instanceof z.ZodRecord) return "json-object";
   return "value";
 }
 
