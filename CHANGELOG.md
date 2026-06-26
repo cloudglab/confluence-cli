@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.0.12 - 2026-06-26
+
+### 架构
+
+- 命令注册表 `RegisteredTool.schema` 从 `z.ZodType<TInput>` 改为 `ZodRawShape`（直接 `{ key: zodType }`），对齐 `zentao-cli` 的 `CliCommandDefinition`，去掉 `z.object(...)` 包装；`parseCommandInput` 内部用 `z.object(schema).strict().parse(...)` 接管校验，单个字段的类型转换、默认值、可选性回归 zod，新增未知参数提示（`未知参数: --foo, --bar`）。
+- `describeParams` / `describeParam` / `describeZodType` 同步接收 `ZodRawShape`：可选性 / 默认值在原始 schema 上判断（`unwrapShapeSchema` 仅用于推断类型描述），修复 0.0.11 把所有 `.optional()` / `.default()` 参数误报成 `required` 的回归；新增 `ZodRecord` / `ZodPipeline` 描述分支。
+- `runCli` 在 `whoami` / `who-am-i` / `getCurrentUser` 三条命令上走专用 `formatCommandOutput` 渲染（`formatWhoami`）：把 Confluence `/user/current` 的 JSON 拍平成多行易读文本，显示名 / 用户名 / `userKey` / 邮箱 / 类型 + 快捷入口提示；失败时回退原文，不破坏 Agent 调用。
+
+### 新增
+
+- `--version` / `-v` 命令行 flag：直接打印当前 CLI 版本，与 `alpha-cli` 等其他 CLI 行为对齐；`update-probe` 的 `SKIP_COMMANDS` 同步加 `--version` / `-v`，避免自动更新探测误触发。
+- HTTP 客户端新增流式 `downloadToFile(path, destPath, params?)`：用 `node:stream/promises.pipeline` 直接落到磁盘，失败时清理半成品文件；`getBuffer` 走原有路径仍返回 `Buffer`。
+- HTTP 客户端新增 `clearCredentials()` 与 `executeWithRetryResponse`：Basic 模式 401 自动重试 1 次（清 auth 后让 axios 重新发起 Basic challenge）；PAT 模式不重试 401，避免污染共享 axios defaults（`getPageSnapshot` 并发 5 个 GET 时任一 401 会竞态清掉其他 4 个的凭证）。
+- `httpAgent` / `httpsAgent` 接入 `keepAlive: true` 的 `node:http` / `node:https` Agent，复用连接，减少高频探测期的握手开销。
+- 错误响应体预览截前 500 字符（`ERROR_BODY_PREVIEW_LIMIT`），超过部分记为 `…(N bytes)`，避免巨型 HTML / JSON 错误页爆掉日志和 message。
+- `sortParams` 用纯字符比较 (`< / > / 0`) 替代 `localeCompare`，保证 GET 缓存键在不同 locale 下稳定。
+
+### 变更
+
+- `compact` 输出模式只改 JSON 形态（单行不缩进），**不再裁剪** `items` 数组前 20 / 大字符串前 600；与 `normal` / `verbose` 的差异收敛到是否注入 `meta` 与是否裁剪字段两步，便于 Agent 直接消费完整数据。`src/utils/output-mode.ts` 同步删除 `ARRAY_LIMIT` / `STRING_LIMIT` / `LARGE_STRING_KEYS` 常量。
+- GET 缓存加 LRU + `GET_CACHE_MAX_SIZE = 128`：命中时移到 `Map` 末尾，写入时若超过上限弹出最旧 key，避免无限增长。`recordRequest` / `recordRetry` 在 `runWithMetrics` / `executeWithRetryResponse` 中分离，重试不再被记成多次请求。
+- `--role` 错误信息：空值抛 `无效 role: <value>（需要 full|reader|writer）`，之前空值会被误判为有效；非法值提示带候选集，便于 Agent 自我修复。
+- 删除 `src/core/pagination.ts` 整个模块与 `src/core/list-result.ts` 中 `extractItems` / `toServerListResult` / `toClientPaginatedListResult` 三个辅助函数：项目早已不再使用客户端分页工具，`parseCommandInput` 也已切换到 zod 原生校验。
+- 命令名修正：`request → callRestApi`、`searchSpace → listSpaces`（在 `COMMAND_DESCRIPTIONS` 中标注为 `listRestApis` / `callRestApi`，保持与官方 REST 术语一致）；`listLabels → getLabels` 在描述映射中同步对齐。
+- `roles.ts.getToolGroups` 与 `write-guard.ts.assertWriteAllowed` 标注为 `@internal`：仅测试与外部脚本消费；handler 走 `previewOrAssertWriteAllowed`（返回诊断对象），保留导出是为了让 `tests/core/*.test.ts` 能 inline import 断言 throw 行为。
+- `markfluence` 表格转换去掉了冗余 `<br/>` 归一化分支，避免在某些 Markdown 表格里把语义化换行替换成不可见字符。
+
+### 测试
+
+- 新增 `tests/core/cli-output.test.ts`：覆盖 `ZodRawShape` 下的 `describeParams` / `describeParam`、可选 / 默认参数渲染、`formatWhoami` 多行输出与失败回退、`buildCommandList` 按 `callRestApi` / `listRestApis` 分组。
+- 新增 `tests/core/output-mode.test.ts`：覆盖 `compact` 不裁剪、`normal` 注入 `meta`、`verbose` 原样返回三档差异；`ARRAY_LIMIT` / `STRING_LIMIT` 行为已下线，断言相应调整。
+- `tests/core/list-result.test.ts` 与 `tests/core/pagination.test.ts` 删除（伴随 source 删除）。
+- `tests/core/cli-registry.test.ts` 调整：未知参数抛出 `未知参数: --xxx`；`schema` 切换到 `ZodRawShape` 后 `.refine()` 链路已被 handler 手抛错替代。
+- `tests/tools/transfer.test.ts` / `tests/utils/markdown.test.ts` / `tests/cli.test.ts` 同步表格 `<br/>` 归一化、`--version` / `-v` flag、`--role` 错误信息变更。
+- `tests/core/http.test.ts` 调整：`http.post` / `http.put` / `http.delete` 内部统一走 `client.request`，断言目标换成 `client.request` 入参；保留 401 / 网络错误重试断言。
+
+### 工程化
+
+- `scripts/check-coverage.mjs` 新增覆盖率门槛检查脚本，`package.json` 暴露 `pnpm coverage`，CI / 本地可一键校验关键模块覆盖。
+- `scripts/copy-skills.mjs` 调整：从 `skills/` 复制到 `.agents/skills/` 时排除同名软链目录，避免 npm tarball 里夹带仓库内的相对路径符号链接。
+- `vitest` 与 `@vitest/coverage-v8` 同步升到 v4.1.8，与 `zentao-cli` 对齐。
+
 ## 0.0.11 - 2026-06-24
 
 ### 修复
