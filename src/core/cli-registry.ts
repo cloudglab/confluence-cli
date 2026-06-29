@@ -1,5 +1,6 @@
 import { z, type ZodRawShape, type ZodTypeAny } from "zod";
 import type { JsonContentResult } from "../types/common.js";
+import type { CommandRecommendationDefinition } from "./recommendations.js";
 
 /**
  * 命令元数据,用于帮 Agent 在跑命令前了解代价和后续推荐步骤。
@@ -15,6 +16,7 @@ import type { JsonContentResult } from "../types/common.js";
 export interface CommandMetadata {
   costHint?: string;
   nextBestTools?: string[];
+  recommendations?: CommandRecommendationDefinition[];
   cacheable?: boolean;
   idempotent?: boolean;
 }

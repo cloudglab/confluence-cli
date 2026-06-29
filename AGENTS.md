@@ -108,6 +108,15 @@ Agent hints:
 
 元数据集中维护在 `src/core/tool-registry.ts` 的 `COMMAND_METADATA` 表，新增核心命令时按相同模式补一行即可。
 
+### 下一步推荐（`--recommend` / `meta.next`）
+
+- `--recommend` 是**显式开启**的运行时开关；默认不注入推荐
+- 开启后，`runCli` 会把当前命令的 `metadata.recommendations` 解析后写进 `meta.next`
+- 推荐条目结构：`tool` / `reason` / `priority` / `args` / `example`
+- `args` 支持 `{ source: 'input' | 'payload', path: 'a.b.c' }` 点号路径映射；解析失败时保留条目，但省略 `args` / `example`
+- 没配 `recommendations` 的命令会回退到 `nextBestTools`，自动补默认 `reason`
+- 实现入口：`src/core/recommendations.ts`、`src/cli.ts`、`src/core/tool-registry.ts`
+
 ### HTTP 层优化（zentao-cli 借鉴）
 
 `ConfluenceHttpClient`（`src/core/http.ts`）做了三层 AI 友好的优化：

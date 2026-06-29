@@ -35,4 +35,47 @@ describe("registerTools", () => {
     expect(names).toContain("getContent");
     expect(names).not.toContain("uploadMarkdown");
   });
+
+  it("attaches rich recommendations metadata to high-frequency commands", async () => {
+    const contentRegistry = new InMemoryCliRegistry();
+    const attachmentRegistry = new InMemoryCliRegistry();
+    const transferRegistry = new InMemoryCliRegistry();
+    const writeRegistry = new InMemoryCliRegistry();
+    const restRegistry = new InMemoryCliRegistry();
+
+    await registerTools(contentRegistry, "full", { commandName: "getPageSnapshot" });
+    await registerTools(attachmentRegistry, "full", { commandName: "listAttachments" });
+    await registerTools(transferRegistry, "full", { commandName: "uploadMarkdown" });
+    await registerTools(writeRegistry, "full", { commandName: "addComment" });
+    await registerTools(restRegistry, "full", { commandName: "callRestApi" });
+
+    const snapshot = contentRegistry.get("getPageSnapshot");
+    const attachments = attachmentRegistry.get("listAttachments");
+    const uploadMarkdown = transferRegistry.get("uploadMarkdown");
+    const addComment = writeRegistry.get("addComment");
+    const callRestApi = restRegistry.get("callRestApi");
+    expect(snapshot?.metadata?.recommendations?.[0]).toMatchObject({
+      tool: "getContent",
+      args: { id: { source: "input", path: "id" } },
+    });
+    expect(attachments?.metadata?.recommendations?.[0]).toMatchObject({
+      tool: "downloadAttachment",
+      args: {
+        id: { source: "input", path: "id" },
+        attachmentId: { source: "payload", path: "results.0.id" },
+      },
+    });
+    expect(uploadMarkdown?.metadata?.recommendations?.[0]).toMatchObject({
+      tool: "getContent",
+      args: { id: { source: "payload", path: "page.id" } },
+    });
+    expect(addComment?.metadata?.recommendations?.[0]).toMatchObject({
+      tool: "getComments",
+      args: { id: { source: "input", path: "id" } },
+    });
+    expect(callRestApi?.metadata?.recommendations?.[0]).toMatchObject({
+      tool: "getContent",
+      args: { id: { source: "input", path: "pathParams.id" } },
+    });
+  });
 });

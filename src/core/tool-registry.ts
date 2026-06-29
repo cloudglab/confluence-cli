@@ -42,42 +42,221 @@ const COMMAND_METADATA: Record<string, CommandMetadata> = {
   initConfluence: { costHint: "0-1 REST 请求(校验连接)", nextBestTools: ["whoami", "searchContent"] },
 
   // space
-  listSpaces: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["getSpace", "searchContent"] },
-  getSpace: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["listSpaces", "searchContent"] },
+  listSpaces: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["getSpace", "searchContent"],
+    recommendations: [
+      { tool: "getSpace", reason: "继续读取某个空间的详情", priority: 0, args: { spaceKey: { source: "payload", path: "items.0.key" } } },
+      { tool: "searchContent", reason: "在空间范围内继续搜页面", priority: -1 },
+    ],
+  },
+  getSpace: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["listSpaces", "searchContent"],
+    recommendations: [
+      { tool: "searchContent", reason: "按当前空间继续搜索内容", priority: 0 },
+      { tool: "listSpaces", reason: "回到空间列表继续挑选", priority: -1 },
+    ],
+  },
 
   // content
-  searchContent: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["findContent", "getContent", "report"] },
-  getContent: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["getPageChildren", "addLabels", "downloadPage"] },
-  getPageSnapshot: { costHint: "5 REST 请求并行(15s 缓存, 重复调用几乎免费)", nextBestTools: ["getContent", "getLabels", "getComments", "listAttachments", "getPageChildren"] },
-  findContent: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["getContent", "searchContent"] },
-  report: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["searchContent", "getContent"] },
-  getPageChildren: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["getContent", "searchContent"] },
-  getComments: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["getContent"] },
-  addComment: { costHint: "1 REST 请求,需要 --confirm true", nextBestTools: ["getComments", "getContent"], cacheable: false, idempotent: false },
+  searchContent: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["findContent", "getContent", "report"],
+    recommendations: [
+      { tool: "findContent", reason: "按标题或空间缩小命中范围", priority: 0 },
+      { tool: "getContent", reason: "读取某个命中页面的正文", priority: 0 },
+      { tool: "report", reason: "切到日报/周报视角继续筛选", priority: -1 },
+    ],
+  },
+  getContent: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["getPageChildren", "addLabels", "downloadPage"],
+    recommendations: [
+      { tool: "getPageChildren", reason: "继续查看当前页面的子页结构", priority: 0, args: { id: { source: "input", path: "id" } } },
+      { tool: "addLabels", reason: "给当前页面补标签", priority: -1, args: { id: { source: "input", path: "id" } } },
+      { tool: "downloadPage", reason: "把当前页面下载到本地", priority: -1, args: { id: { source: "input", path: "id" } } },
+    ],
+  },
+  getPageSnapshot: {
+    costHint: "5 REST 请求并行(15s 缓存, 重复调用几乎免费)",
+    nextBestTools: ["getContent", "getLabels", "getComments", "listAttachments", "getPageChildren"],
+    recommendations: [
+      { tool: "getContent", reason: "查看当前页面完整正文", priority: 1, args: { id: { source: "input", path: "id" } } },
+      { tool: "getLabels", reason: "单独查看当前页面标签", priority: 0, args: { id: { source: "input", path: "id" } } },
+      { tool: "getComments", reason: "单独查看当前页面评论", priority: 0, args: { id: { source: "input", path: "id" } } },
+      { tool: "listAttachments", reason: "单独查看当前页面附件", priority: 0, args: { id: { source: "input", path: "id" } } },
+      { tool: "getPageChildren", reason: "单独查看当前页面子页", priority: 0, args: { id: { source: "input", path: "id" } } },
+    ],
+  },
+  findContent: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["getContent", "searchContent"],
+    recommendations: [
+      { tool: "getContent", reason: "读取找到的目标页面正文", priority: 0, args: { id: { source: "payload", path: "items.0.id" } } },
+      { tool: "searchContent", reason: "改用 CQL 做更细粒度检索", priority: -1 },
+    ],
+  },
+  report: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["searchContent", "getContent"],
+    recommendations: [
+      { tool: "getContent", reason: "读取报表里某条内容的正文", priority: 0, args: { id: { source: "payload", path: "items.0.id" } } },
+      { tool: "searchContent", reason: "改用原始 CQL 继续深挖", priority: -1 },
+    ],
+  },
+  getPageChildren: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["getContent", "searchContent"],
+    recommendations: [
+      { tool: "getContent", reason: "读取当前页或某个子页正文", priority: 0, args: { id: { source: "input", path: "id" } } },
+      { tool: "searchContent", reason: "切回搜索扩大范围", priority: -1 },
+    ],
+  },
+  getComments: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["getContent"],
+    recommendations: [
+      { tool: "getContent", reason: "回看评论所属页面正文", priority: 0, args: { id: { source: "input", path: "id" } } },
+      { tool: "addComment", reason: "继续给当前页面补充评论", priority: -1, args: { id: { source: "input", path: "id" } } },
+    ],
+  },
+  addComment: {
+    costHint: "1 REST 请求,需要 --confirm true",
+    nextBestTools: ["getComments", "getContent"],
+    recommendations: [
+      { tool: "getComments", reason: "刷新当前页面评论列表", priority: 1, args: { id: { source: "input", path: "id" } } },
+      { tool: "getContent", reason: "回看当前页面正文", priority: 0, args: { id: { source: "input", path: "id" } } },
+    ],
+    cacheable: false,
+    idempotent: false,
+  },
   deleteContent: { costHint: "1 REST 请求,需要 --confirm true", cacheable: false, idempotent: false },
 
   // labels
-  addLabels: { costHint: "1 REST 请求,需要 --confirm true", nextBestTools: ["getLabels", "getContent"], cacheable: false, idempotent: false },
-  deleteLabel: { costHint: "1 REST 请求,需要 --confirm true", cacheable: false, idempotent: false },
-  getLabels: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["addLabels", "deleteLabel", "getContent"] },
+  addLabels: {
+    costHint: "1 REST 请求,需要 --confirm true",
+    nextBestTools: ["getLabels", "getContent"],
+    recommendations: [
+      { tool: "getLabels", reason: "刷新当前页面标签列表", priority: 1, args: { id: { source: "input", path: "id" } } },
+      { tool: "getContent", reason: "回看当前页面正文", priority: 0, args: { id: { source: "input", path: "id" } } },
+    ],
+    cacheable: false,
+    idempotent: false,
+  },
+  deleteLabel: {
+    costHint: "1 REST 请求,需要 --confirm true",
+    recommendations: [
+      { tool: "getLabels", reason: "刷新当前页面标签列表", priority: 1, args: { id: { source: "input", path: "id" } } },
+      { tool: "getContent", reason: "回看当前页面正文", priority: 0, args: { id: { source: "input", path: "id" } } },
+    ],
+    cacheable: false,
+    idempotent: false,
+  },
+  getLabels: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["addLabels", "deleteLabel", "getContent"],
+    recommendations: [
+      { tool: "addLabels", reason: "继续给当前页面补标签", priority: 0, args: { id: { source: "input", path: "id" } } },
+      { tool: "deleteLabel", reason: "移除当前页面上的某个标签", priority: -1, args: { id: { source: "input", path: "id" } } },
+      { tool: "getContent", reason: "回看当前页面正文", priority: -1, args: { id: { source: "input", path: "id" } } },
+    ],
+  },
 
   // attachments
-  listAttachments: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["downloadAttachment", "uploadAttachment"] },
-  uploadAttachment: { costHint: "1 REST 请求,需要 --confirm true", nextBestTools: ["listAttachments"], cacheable: false, idempotent: false },
-  updateAttachment: { costHint: "1 REST 请求,需要 --confirm true", cacheable: false, idempotent: false },
+  listAttachments: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["downloadAttachment", "uploadAttachment"],
+    recommendations: [
+      { tool: "downloadAttachment", reason: "下载当前页某个附件", priority: 0, args: { id: { source: "input", path: "id" }, attachmentId: { source: "payload", path: "results.0.id" } } },
+      { tool: "uploadAttachment", reason: "继续向当前页上传附件", priority: -1, args: { id: { source: "input", path: "id" } } },
+    ],
+  },
+  uploadAttachment: {
+    costHint: "1 REST 请求,需要 --confirm true",
+    nextBestTools: ["listAttachments"],
+    recommendations: [
+      { tool: "listAttachments", reason: "刷新当前页面附件列表", priority: 1, args: { id: { source: "input", path: "id" } } },
+      { tool: "downloadAttachment", reason: "下载刚上传的附件核对", priority: 0, args: { id: { source: "input", path: "id" } } },
+      { tool: "getContent", reason: "回看附件所属页面正文", priority: -1, args: { id: { source: "input", path: "id" } } },
+    ],
+    cacheable: false,
+    idempotent: false,
+  },
+  updateAttachment: {
+    costHint: "1 REST 请求,需要 --confirm true",
+    recommendations: [
+      { tool: "listAttachments", reason: "刷新当前页面附件列表", priority: 1, args: { id: { source: "input", path: "id" } } },
+      { tool: "downloadAttachment", reason: "下载刚更新的附件核对", priority: 0, args: { id: { source: "input", path: "id" }, attachmentId: { source: "input", path: "attachmentId" } } },
+      { tool: "getContent", reason: "回看附件所属页面正文", priority: -1, args: { id: { source: "input", path: "id" } } },
+    ],
+    cacheable: false,
+    idempotent: false,
+  },
   downloadAttachment: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["listAttachments"] },
 
   // transfer
-  uploadMarkdown: { costHint: "1-3 REST 请求(上传/转换/确认),需要 --confirm true", nextBestTools: ["downloadPage", "getContent"], cacheable: false, idempotent: false },
-  uploadHtml: { costHint: "1-3 REST 请求(上传/转换/确认),需要 --confirm true", nextBestTools: ["getContent", "downloadPage"], cacheable: false, idempotent: false },
-  downloadPage: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["getContent", "uploadMarkdown"] },
+  uploadMarkdown: {
+    costHint: "1-3 REST 请求(上传/转换/确认),需要 --confirm true",
+    nextBestTools: ["downloadPage", "getContent"],
+    recommendations: [
+      { tool: "getContent", reason: "回读刚上传/更新的页面正文", priority: 1, args: { id: { source: "payload", path: "page.id" } } },
+      { tool: "downloadPage", reason: "把刚上传的页面下载到本地核对", priority: 0, args: { id: { source: "payload", path: "page.id" } } },
+      { tool: "listAttachments", reason: "查看本次上传后页面上的附件", priority: 0, args: { id: { source: "payload", path: "page.id" } } },
+    ],
+    cacheable: false,
+    idempotent: false,
+  },
+  uploadHtml: {
+    costHint: "1-3 REST 请求(上传/转换/确认),需要 --confirm true",
+    nextBestTools: ["getContent", "downloadPage"],
+    recommendations: [
+      { tool: "getContent", reason: "回读刚上传/更新的页面正文", priority: 1, args: { id: { source: "payload", path: "page.id" } } },
+      { tool: "downloadPage", reason: "把刚上传的页面下载到本地核对", priority: 0, args: { id: { source: "payload", path: "page.id" } } },
+      { tool: "listAttachments", reason: "查看本次上传后页面上的附件", priority: 0, args: { id: { source: "payload", path: "page.id" } } },
+    ],
+    cacheable: false,
+    idempotent: false,
+  },
+  downloadPage: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["getContent", "uploadMarkdown"],
+    recommendations: [
+      { tool: "getContent", reason: "回到远端继续查看页面正文", priority: 1, args: { id: { source: "input", path: "id" } } },
+      { tool: "listAttachments", reason: "继续查看这个页面的附件", priority: 0, args: { id: { source: "input", path: "id" } } },
+      { tool: "uploadMarkdown", reason: "基于本地文件回传修改后的页面", priority: -1 },
+    ],
+  },
 
   // rest
-  callRestApi: { costHint: "1 REST 请求(任意 method,POST/PUT/DELETE 不缓存)", nextBestTools: ["searchContent", "getContent"] },
-  listRestApis: { costHint: "1 REST 请求(15s 缓存)", nextBestTools: ["callRestApi"] },
+  callRestApi: {
+    costHint: "1 REST 请求(任意 method,POST/PUT/DELETE 不缓存)",
+    nextBestTools: ["searchContent", "getContent"],
+    recommendations: [
+      { tool: "getContent", reason: "如果这个 REST 调用针对页面，可回读页面正文", priority: 0, args: { id: { source: "input", path: "pathParams.id" } } },
+      { tool: "searchContent", reason: "如果 REST 返回不够直观，可退回内容搜索", priority: -1 },
+      { tool: "listRestApis", reason: "继续查看其他官方 REST 模板", priority: -2 },
+    ],
+  },
+  listRestApis: {
+    costHint: "1 REST 请求(15s 缓存)",
+    nextBestTools: ["callRestApi"],
+    recommendations: [
+      { tool: "callRestApi", reason: "挑一个模板继续直连 REST 端点", priority: 0 },
+      { tool: "searchContent", reason: "如果只是查页面内容，可回到高层命令", priority: -1 },
+    ],
+  },
 
   // metadata
-  urlParse: { costHint: "0 REST 请求(纯字符串解析,不发请求)", nextBestTools: ["getContent", "getSpace", "searchContent"] },
+  urlParse: {
+    costHint: "0 REST 请求(纯字符串解析,不发请求)",
+    nextBestTools: ["getContent", "getSpace", "searchContent"],
+    recommendations: [
+      { tool: "getContent", reason: "如果 URL 指向页面，可直接读取正文", priority: 0, args: { id: { source: "payload", path: "params.pageId" } } },
+      { tool: "getSpace", reason: "如果 URL 指向空间，可继续读取空间详情", priority: -1, args: { spaceKey: { source: "payload", path: "params.spaceKey" } } },
+      { tool: "searchContent", reason: "如果 URL 无法直接命中，可退回搜索", priority: -2 },
+    ],
+  },
 };
 
 export async function registerTools(registry: CliRegistry, role: Role, options: RegisterToolsOptions = {}): Promise<void> {

@@ -208,4 +208,28 @@ describe("runCli", () => {
     expect(lastWrite).toContain("用户名：me");
     expect(lastWrite).toContain("快捷入口");
   });
+
+  it("injects meta.next when --recommend is enabled", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runCli(["--recommend", "urlParse", "--url", "https://cf.cloudglab.cn/pages/viewpage.action?pageId=5278156"]);
+
+    const output = String(write.mock.calls.at(-1)?.[0] ?? "").trim();
+    const parsed = JSON.parse(output) as { meta?: { next?: Array<Record<string, unknown>> } };
+    expect(parsed.meta?.next?.[0]).toMatchObject({
+      tool: "getContent",
+      args: { id: "5278156" },
+      example: "confluence getContent --id 5278156",
+    });
+  });
+
+  it("does not inject meta.next when --recommend=false", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runCli(["--recommend=false", "urlParse", "--url", "https://cf.cloudglab.cn/pages/viewpage.action?pageId=5278156"]);
+
+    const output = String(write.mock.calls.at(-1)?.[0] ?? "").trim();
+    const parsed = JSON.parse(output) as { meta?: { next?: Array<Record<string, unknown>> } };
+    expect(parsed.meta?.next).toBeUndefined();
+  });
 });

@@ -13,6 +13,7 @@ import {
 import { buildRegistryForCommand, getAvailableCommandNames } from "./core/manifest.js";
 import { runInstallCommand, runUninstallCommand, runUpdateCommand } from "./install.js";
 import { runDailyUpdateProbe } from "./update-probe.js";
+import { resolveRecommendations } from "./core/recommendations.js";
 import { appendCommandMeta } from "./utils/output-mode.js";
 import { isValidOutputMode, setGlobalOutputMode } from "./utils/result.js";
 import { resetMetrics, snapshotMetrics } from "./core/http-metrics.js";
@@ -20,7 +21,7 @@ import { VERSION } from "./version.js";
 import type { Role } from "./types/common.js";
 
 export async function runCli(argv: string[]): Promise<void> {
-  const { command, commandArgs, role } = parseCli(argv);
+  const { command, commandArgs, role, recommend } = parseCli(argv);
   const registeredCommandNames = await getAvailableCommandNames(role);
   const commandNames = [...new Set([...BUILTIN_COMMAND_NAMES, ...registeredCommandNames])]
     .sort((left, right) => left.localeCompare(right));
@@ -101,7 +102,23 @@ export async function runCli(argv: string[]): Promise<void> {
   const input = parseCommandInput(selected.schema, commandArgs);
   resetMetrics();
   const rawResult = await selected.handler(input);
-  const result = appendCommandMeta(rawResult, { ...snapshotMetrics() });
+  const commandMeta = { ...snapshotMetrics() } as Record<string, unknown>;
+  if (recommend) {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(rawResult.content[0]?.text ?? "null");
+    } catch {
+      payload = undefined;
+    }
+    const next = resolveRecommendations({
+      metadata: selected.metadata,
+      input,
+      payload,
+      availableCommands: new Set(registeredCommandNames),
+    });
+    if (next.length > 0) commandMeta.next = next;
+  }
+  const result = appendCommandMeta(rawResult, commandMeta);
   const rawText = result.content[0]?.text ?? "";
   // whoami / who-am-i / getCurrentUser 走专用渲染,其他命令保持 JSON 输出
   const finalText = await formatCommandOutput(command, rawText);
@@ -168,9 +185,10 @@ function parseChangelogOptions(args: string[]): ChangelogOptions {
   return options;
 }
 
-function parseCli(argv: string[]): { command?: string; commandArgs: string[]; role: Role } {
+function parseCli(argv: string[]): { command?: string; commandArgs: string[]; role: Role; recommend: boolean } {
   const args = [...argv];
   let role: Role = "full";
+  let recommend = false;
 
   // --output compact|normal|verbose: 必须在 runCli 早期应用,以便影响所有 handler
   const inlineOutputIndex = args.findIndex((arg) => arg.startsWith("--output="));
@@ -220,6 +238,25 @@ function parseCli(argv: string[]): { command?: string; commandArgs: string[]; ro
     args.splice(roleIndex, 2);
   }
 
+  const inlineRecommendIndex = args.findIndex((arg) => arg.startsWith("--recommend="));
+  if (inlineRecommendIndex >= 0) {
+    const value = args[inlineRecommendIndex].slice("--recommend=".length).trim().toLowerCase();
+    recommend = value === "" ? true : !["false", "0", "no", "off"].includes(value);
+    args.splice(inlineRecommendIndex, 1);
+  }
+
+  const recommendIndex = args.indexOf("--recommend");
+  if (recommendIndex >= 0) {
+    const next = args[recommendIndex + 1];
+    if (next && !next.startsWith("--") && isBooleanLikeArg(next)) {
+      recommend = !["false", "0", "no", "off"].includes(next.trim().toLowerCase());
+      args.splice(recommendIndex, 2);
+    } else {
+      recommend = true;
+      args.splice(recommendIndex, 1);
+    }
+  }
+
   const normalized = normalizeCommandAlias(args[0], args.slice(1));
 
   // 隐式 URL 入口:首参是 URL 时,自动走 urlParse
@@ -230,6 +267,7 @@ function parseCli(argv: string[]): { command?: string; commandArgs: string[]; ro
       command: "urlParse",
       commandArgs: ["--url", url, ...remaining],
       role,
+      recommend,
     };
   }
 
@@ -237,7 +275,12 @@ function parseCli(argv: string[]): { command?: string; commandArgs: string[]; ro
     command: normalized.command,
     commandArgs: args.slice(1 + normalized.consumedArgs),
     role,
+    recommend,
   };
+}
+
+function isBooleanLikeArg(value: string): boolean {
+  return ["true", "false", "1", "0", "yes", "no", "on", "off"].includes(value.trim().toLowerCase());
 }
 
 function normalizeCommandAlias(command: string | undefined, args: string[]): { command: string | undefined; consumedArgs: number } {

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.0.0 - 2026-06-29
+
+### Release
+
+- 正式版本起点切换到 `1.0.0`。
+- README 收敛为长期稳定的项目说明；版本变更摘要继续以 CHANGELOG 和 Release notes 为准。
+
 ## 0.0.12 - 2026-06-26
 
 ### 架构
@@ -13,6 +20,8 @@ All notable changes to this project will be documented in this file.
 ### 新增
 
 - `--version` / `-v` 命令行 flag：直接打印当前 CLI 版本，与 `alpha-cli` 等其他 CLI 行为对齐；`update-probe` 的 `SKIP_COMMANDS` 同步加 `--version` / `-v`，避免自动更新探测误触发。
+- 新增显式运行时推荐开关 `--recommend`：仅在用户显式传入时，CLI 才会把结构化下一步建议写入返回 JSON 的 `meta.next`；支持 `--recommend` / `--recommend=true` 开启，`--recommend=false` 关闭。推荐条目统一为 `tool` / `reason` / `priority` / `args` / `example` 五字段，适合 Agent / 脚本直接串下一条命令。
+- 新增推荐解析器 `src/core/recommendations.ts`：支持从当前输入或返回 payload 通过点号路径（如 `input.id`、`payload.page.id`、`payload.results.0.id`）预填参数；路径解析失败时保留推荐条目，但省略 `args` / `example`，避免误传参。
 - HTTP 客户端新增流式 `downloadToFile(path, destPath, params?)`：用 `node:stream/promises.pipeline` 直接落到磁盘，失败时清理半成品文件；`getBuffer` 走原有路径仍返回 `Buffer`。
 - HTTP 客户端新增 `clearCredentials()` 与 `executeWithRetryResponse`：Basic 模式 401 自动重试 1 次（清 auth 后让 axios 重新发起 Basic challenge）；PAT 模式不重试 401，避免污染共享 axios defaults（`getPageSnapshot` 并发 5 个 GET 时任一 401 会竞态清掉其他 4 个的凭证）。
 - `httpAgent` / `httpsAgent` 接入 `keepAlive: true` 的 `node:http` / `node:https` Agent，复用连接，减少高频探测期的握手开销。
@@ -22,6 +31,9 @@ All notable changes to this project will be documented in this file.
 ### 变更
 
 - `compact` 输出模式只改 JSON 形态（单行不缩进），**不再裁剪** `items` 数组前 20 / 大字符串前 600；与 `normal` / `verbose` 的差异收敛到是否注入 `meta` 与是否裁剪字段两步，便于 Agent 直接消费完整数据。`src/utils/output-mode.ts` 同步删除 `ARRAY_LIMIT` / `STRING_LIMIT` / `LARGE_STRING_KEYS` 常量。
+- 命令元数据从原来的 `costHint` / `nextBestTools` 扩展到 `recommendations`：`help <command>` 仍渲染静态 `Agent hints:`，运行时则由 `runCli` 按需解析 `metadata.recommendations` 注入 `meta.next`；未配置 `recommendations` 的命令会自动回退到 `nextBestTools` 并补默认 `reason`。
+- `COMMAND_DESCRIPTIONS` 抽到 `src/core/command-descriptions.ts`，供帮助文案与推荐默认 `reason` 共用，减少两套命令描述漂移。
+- 一批高频命令已补推荐声明并支持自动预填参数：页面读取（`getContent` / `getPageSnapshot` / `getPageChildren` / `getComments` / `getLabels`）、搜索与空间（`searchContent` / `findContent` / `report` / `listSpaces` / `getSpace` / `urlParse`）、附件（`listAttachments` / `uploadAttachment` / `updateAttachment`）、上传下载（`uploadMarkdown` / `uploadHtml` / `downloadPage`）、写操作（`addComment` / `addLabels` / `deleteLabel`）以及 REST 直通（`callRestApi` / `listRestApis`）。
 - GET 缓存加 LRU + `GET_CACHE_MAX_SIZE = 128`：命中时移到 `Map` 末尾，写入时若超过上限弹出最旧 key，避免无限增长。`recordRequest` / `recordRetry` 在 `runWithMetrics` / `executeWithRetryResponse` 中分离，重试不再被记成多次请求。
 - `--role` 错误信息：空值抛 `无效 role: <value>（需要 full|reader|writer）`，之前空值会被误判为有效；非法值提示带候选集，便于 Agent 自我修复。
 - 删除 `src/core/pagination.ts` 整个模块与 `src/core/list-result.ts` 中 `extractItems` / `toServerListResult` / `toClientPaginatedListResult` 三个辅助函数：项目早已不再使用客户端分页工具，`parseCommandInput` 也已切换到 zod 原生校验。
@@ -33,10 +45,17 @@ All notable changes to this project will be documented in this file.
 
 - 新增 `tests/core/cli-output.test.ts`：覆盖 `ZodRawShape` 下的 `describeParams` / `describeParam`、可选 / 默认参数渲染、`formatWhoami` 多行输出与失败回退、`buildCommandList` 按 `callRestApi` / `listRestApis` 分组。
 - 新增 `tests/core/output-mode.test.ts`：覆盖 `compact` 不裁剪、`normal` 注入 `meta`、`verbose` 原样返回三档差异；`ARRAY_LIMIT` / `STRING_LIMIT` 行为已下线，断言相应调整。
+- 新增 `tests/core/recommendations.test.ts`：覆盖 `nextBestTools` 回退、`priority` 排序、从 `input` / `payload` 解析预填参数、路径解析失败时省略 `args` / `example`、`payload.page.id` / `input.pathParams.id` / `input.attachmentId` 等嵌套路径。
+- `tests/core/tool-registry.test.ts`、`tests/cli.test.ts`、`tests/tools/rest.test.ts` 同步覆盖 `--recommend` 开关、`urlParse` 注入 `meta.next`、高频命令 `metadata.recommendations` 挂载，以及 REST 直通命令的 `pathParams.id` 预填场景。
 - `tests/core/list-result.test.ts` 与 `tests/core/pagination.test.ts` 删除（伴随 source 删除）。
 - `tests/core/cli-registry.test.ts` 调整：未知参数抛出 `未知参数: --xxx`；`schema` 切换到 `ZodRawShape` 后 `.refine()` 链路已被 handler 手抛错替代。
 - `tests/tools/transfer.test.ts` / `tests/utils/markdown.test.ts` / `tests/cli.test.ts` 同步表格 `<br/>` 归一化、`--version` / `-v` flag、`--role` 错误信息变更。
 - `tests/core/http.test.ts` 调整：`http.post` / `http.put` / `http.delete` 内部统一走 `client.request`，断言目标换成 `client.request` 入参；保留 401 / 网络错误重试断言。
+
+### 文档
+
+- README 新增“下一步推荐（`--recommend`）”章节，说明显式开关行为、`meta.next` 输出结构、字段语义与示例命令。
+- AGENTS.md 新增 `--recommend` / `meta.next` 实现约定，补充 `metadata.recommendations`、`nextBestTools` 回退与路径映射规则，方便后续扩展新命令时沿用同一模式。
 
 ### 工程化
 
