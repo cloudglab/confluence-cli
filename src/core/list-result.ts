@@ -1,3 +1,5 @@
+import { summarizeList, type ListSummary } from "./list-summary.js";
+
 /**
  * 列表型结果的标准包装,帮 Agent 一眼看清分页元信息。
  * 对齐 zentao-cli 的 `ListResult` 约定。
@@ -32,14 +34,25 @@ export interface ListResult<T = unknown> {
   scanned?: number;
   itemKey: string;
   items: T[];
+  summary?: ListSummary;
+  meta?: { processed: true; partial: boolean; total: number };
 }
 
-export type ListResultMeta<T> = Omit<ListResult<T>, "items" | "partial"> & {
+export interface ListSummaryOptions {
+  sortKey?: "deadline" | "updatedAt" | "createdAt";
+  groupKey?: string;
+  topN?: number;
+}
+
+export type ListResultMeta<T> = Omit<ListResult<T>, "items" | "partial" | "summary" | "meta"> & {
   /** 手动指定 partial;不传时按 `items.length < total` 推断 */
   partial?: boolean;
+  summary?: ListSummaryOptions;
 };
 
 export function listResult<T>(items: T[], meta: ListResultMeta<T>): ListResult<T> {
+  const summaryOptions = meta.summary;
+  const inferredGroupKey = summaryOptions?.groupKey ?? (items.some((item) => isRecord(item) && "space" in item) ? "space" : undefined);
   return {
     source: meta.source,
     page: meta.page,
@@ -49,5 +62,14 @@ export function listResult<T>(items: T[], meta: ListResultMeta<T>): ListResult<T
     itemKey: meta.itemKey,
     items,
     partial: meta.partial ?? items.length < meta.total,
+    summary: summarizeList(items as Array<{ id: number | string; name?: string; status?: string; deadline?: string; updatedAt?: string; createdAt?: string; productName?: string | number; projectName?: string | number; product?: string | number; project?: string | number }>, {
+      ...(summaryOptions ?? {}),
+      groupKey: inferredGroupKey,
+    }),
+    meta: { processed: true, partial: meta.partial ?? items.length < meta.total, total: meta.total },
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

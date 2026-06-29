@@ -49,6 +49,17 @@ export function normalizePayload(value: unknown, mode: OutputMode): unknown {
 }
 
 function normalizeCompactPayload(value: unknown): unknown {
+  if (isPlainObject(value)) {
+    const record = value as Record<string, unknown>;
+    const meta = isPlainObject(record.meta) ? (record.meta as Record<string, unknown>) : undefined;
+    if (meta?.processed === true) {
+      const promoted = { ...record };
+      if (!("summary" in promoted) && "summary" in meta) {
+        promoted.summary = meta.summary;
+      }
+      return promoted;
+    }
+  }
   return value;
 }
 

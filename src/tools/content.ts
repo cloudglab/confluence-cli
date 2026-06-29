@@ -170,6 +170,7 @@ export function registerContentTools(registry: CliRegistry): void {
           limit: effectiveLimit,
           total: data.size,
           itemKey: "pages",
+          summary: { groupKey: "space", sortKey: "updatedAt" },
         }),
       );
     },
@@ -191,7 +192,17 @@ export function registerContentTools(registry: CliRegistry): void {
     "getPageChildren",
     { id: z.coerce.string(), type: z.string().optional(), expand: z.string().default("space,version"), limit: z.number().int().positive().max(100).default(25) },
     async ({ id, type, expand, limit }) => {
-      return jsonResult(await getApi().getChildren(id, type, expand, limit));
+      const data = await getApi().getChildren(id, type, expand, limit);
+      return jsonResult(
+        listResult(data.results, {
+          source: "rest",
+          page: 1,
+          limit: limit ?? 25,
+          total: data.size,
+          itemKey: type ? `children:${type}` : "children",
+          summary: { groupKey: "space", sortKey: "updatedAt" },
+        }),
+      );
     },
     "Get page children, optionally filtered by child type",
   );
@@ -200,7 +211,16 @@ export function registerContentTools(registry: CliRegistry): void {
     "getComments",
     { id: z.coerce.string(), expand: z.string().default("body.storage,version"), limit: z.number().int().positive().max(100).default(25) },
     async ({ id, expand, limit }) => {
-      return jsonResult(await getApi().getComments(id, expand, limit));
+      const data = await getApi().getComments(id, expand, limit);
+      return jsonResult(
+        listResult(data.results, {
+          source: "rest",
+          page: 1,
+          limit: limit ?? 25,
+          total: data.size,
+          itemKey: "comments",
+        }),
+      );
     },
     "Get page comments",
   );
@@ -266,6 +286,7 @@ export function registerContentTools(registry: CliRegistry): void {
           limit: effectiveLimit,
           total: data.size,
           itemKey: "results",
+          summary: { groupKey: "space", sortKey: "updatedAt" },
         }),
       );
     },

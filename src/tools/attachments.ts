@@ -6,14 +6,23 @@ import { getApi } from "../core/api-provider.js";
 import type { CliRegistry } from "../core/cli-registry.js";
 import { previewOrAssertWriteAllowed } from "../core/write-guard.js";
 import { safeFileName } from "../utils/fs-safe.js";
-import { jsonResult, textResult } from "../utils/result.js";
+import { jsonResult, listResult, textResult } from "../utils/result.js";
 
 export function registerAttachmentTools(registry: CliRegistry): void {
   registry.tool(
     "listAttachments",
     { id: z.coerce.string(), limit: z.number().int().positive().max(100).default(100) },
     async ({ id, limit }) => {
-      return jsonResult(await getApi().listAttachments(id, limit));
+      const data = await getApi().listAttachments(id, limit);
+      return jsonResult(
+        listResult(data.results, {
+          source: "rest",
+          page: 1,
+          limit: limit ?? 100,
+          total: data.size,
+          itemKey: "attachments",
+        }),
+      );
     },
     "List page attachments",
   );
