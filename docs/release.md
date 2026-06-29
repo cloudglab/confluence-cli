@@ -1,5 +1,14 @@
 # Release
 
+## 发布经验
+
+- 命令系统有新增、删除或改名时，必须同时检查并同步 `skills/` 下的说明文档与参考文件。
+- 如果只改 CLI 代码不改 skills，Agent 仍会按旧 reference 调命令，等于把错误一起发出去了。
+- 发版前至少做三件事：
+  - 核对 `list` / `help` / manifest 与源码注册一致。
+  - 核对 `skills/confluence-cli/reference/*` 与 README 示例一致。
+  - 核对构建产物中实际存在新增命令。
+
 ## 发布前检查
 
 ```bash
