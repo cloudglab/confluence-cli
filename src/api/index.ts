@@ -20,6 +20,14 @@ export interface ConfluenceContent {
   _links?: Record<string, string>;
 }
 
+export interface UpdateContentStorageInput {
+  id: string;
+  body: string;
+  title?: string;
+  parentId?: string;
+  retries?: number;
+}
+
 export interface ConfluencePage<T> {
   results: T[];
   size: number;
@@ -100,6 +108,28 @@ export class ConfluenceApi {
       version: { number: input.version },
       body: { [input.representation]: { value: input.body, representation: input.representation } },
     });
+  }
+
+  async updateContentStorage(input: UpdateContentStorageInput): Promise<ConfluenceContent> {
+    const retries = Math.max(0, input.retries ?? 1);
+
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      const current = await this.getContent(input.id, "body.storage,version,title,ancestors");
+      try {
+        return await this.updateContent({
+          id: input.id,
+          title: input.title ?? current.title,
+          body: input.body,
+          representation: "storage",
+          version: (current.version?.number ?? 0) + 1,
+          parentId: input.parentId,
+        });
+      } catch (error) {
+        if (!isVersionConflictError(error) || attempt === retries) throw error;
+      }
+    }
+
+    throw new Error(`更新页面 ${input.id} 失败：超过最大重试次数`);
   }
 
   deleteContent(id: string): Promise<unknown> {
@@ -317,6 +347,16 @@ export class ConfluenceApi {
       })),
     };
   }
+}
+
+function isVersionConflictError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const httpError = error as Error & { statusCode?: number; responseBody?: unknown };
+  if (httpError.statusCode === 409) return true;
+  const bodyText = typeof httpError.responseBody === "string"
+    ? httpError.responseBody
+    : JSON.stringify(httpError.responseBody ?? {});
+  return /version|conflict/i.test(`${error.message} ${bodyText}`);
 }
 
 export interface PageSnapshot {

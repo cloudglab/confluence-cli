@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { readFile } from "node:fs/promises";
 import { getApi } from "../core/api-provider.js";
 import type { CliRegistry } from "../core/cli-registry.js";
 import { previewOrAssertWriteAllowed } from "../core/write-guard.js";
@@ -104,6 +105,29 @@ export function registerContentTools(registry: CliRegistry): void {
       return jsonResult(await getApi().getContent(id, expand));
     },
     "Get one Confluence page/content by id",
+  );
+
+  registry.tool(
+    "updateContentStorage",
+    {
+      id: z.coerce.string(),
+      file: z.string().trim().min(1).describe("本地 HTML / storage 文件路径"),
+      title: z.string().trim().min(1).optional().describe("可选。覆盖页面标题；不传则保留当前标题"),
+      parentId: z.coerce.string().optional().describe("可选。覆盖父页面 ID"),
+      retries: z.number().int().nonnegative().max(3).default(1).describe("版本冲突时自动重试次数，默认 1"),
+      confirm: z.boolean().default(false),
+    },
+    async ({ id, file, title, parentId, retries, confirm }) => {
+      const body = await readFile(file, "utf8");
+      const preview = previewOrAssertWriteAllowed({
+        action: "updateContentStorage",
+        confirm,
+        payload: { id, file, title, parentId, retries, bodyPreview: body.slice(0, 500) },
+      });
+      if (preview) return jsonResult(preview);
+      return jsonResult(await getApi().updateContentStorage({ id, body, title, parentId, retries }));
+    },
+    "Update page body with Confluence storage HTML; auto-fetches latest version and retries on version conflict; requires confirm=true",
   );
 
   registry.tool(

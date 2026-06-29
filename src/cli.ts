@@ -292,5 +292,9 @@ function normalizeCommandAlias(command: string | undefined, args: string[]): { c
     return { command: "whoami", consumedArgs: 2 };
   }
 
+  if (command === "config" && args[0] === "show") {
+    return { command: "configShow", consumedArgs: 1 };
+  }
+
   return { command, consumedArgs: 0 };
 }

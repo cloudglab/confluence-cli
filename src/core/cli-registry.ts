@@ -182,6 +182,18 @@ function coerceValue(value: unknown, schema: ZodTypeAny): unknown {
     return parseJsonValue(value, "对象参数");
   }
 
+  if (unwrapped instanceof z.ZodRecord) {
+    if (typeof value !== "string") return value;
+    return parseJsonValue(value, "对象参数");
+  }
+
+  if (unwrapped instanceof z.ZodUnknown || unwrapped instanceof z.ZodAny) {
+    if (typeof value === "string" && looksLikeJsonValue(value)) {
+      return parseJsonValue(value, "JSON 参数");
+    }
+    return value;
+  }
+
   if (unwrapped instanceof z.ZodUnion) {
     for (const option of unwrapped._def.options) {
       try {
@@ -194,6 +206,16 @@ function coerceValue(value: unknown, schema: ZodTypeAny): unknown {
   }
 
   return value;
+}
+
+function looksLikeJsonValue(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.startsWith("{")
+    || trimmed.startsWith("[")
+    || trimmed === "null"
+    || trimmed === "true"
+    || trimmed === "false"
+    || /^-?\d+(\.\d+)?$/.test(trimmed);
 }
 
 function parseJsonValue(value: string, label: string): unknown {

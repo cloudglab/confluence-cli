@@ -39,6 +39,7 @@ const groupLoaders: Record<ReturnType<typeof getToolGroupNames>[number], GroupLo
 const COMMAND_METADATA: Record<string, CommandMetadata> = {
   // init / 元信息
   whoami: { costHint: "1 REST 请求", nextBestTools: ["initConfluence", "searchContent"] },
+  configShow: { costHint: "0-1 次本地配置读取", nextBestTools: ["whoami", "initConfluence"] },
   initConfluence: { costHint: "0-1 REST 请求(校验连接)", nextBestTools: ["whoami", "searchContent"] },
 
   // space
@@ -71,11 +72,12 @@ const COMMAND_METADATA: Record<string, CommandMetadata> = {
   },
   getContent: {
     costHint: "1 REST 请求(15s 缓存)",
-    nextBestTools: ["getPageChildren", "addLabels", "downloadPage"],
+    nextBestTools: ["getPageChildren", "addLabels", "downloadPage", "updateContentStorage"],
     recommendations: [
       { tool: "getPageChildren", reason: "继续查看当前页面的子页结构", priority: 0, args: { id: { source: "input", path: "id" } } },
       { tool: "addLabels", reason: "给当前页面补标签", priority: -1, args: { id: { source: "input", path: "id" } } },
       { tool: "downloadPage", reason: "把当前页面下载到本地", priority: -1, args: { id: { source: "input", path: "id" } } },
+      { tool: "updateContentStorage", reason: "按 storage HTML 回写当前页面正文", priority: -1, args: { id: { source: "input", path: "id" } } },
     ],
   },
   getPageSnapshot: {
@@ -132,6 +134,16 @@ const COMMAND_METADATA: Record<string, CommandMetadata> = {
     idempotent: false,
   },
   deleteContent: { costHint: "1 REST 请求,需要 --confirm true", cacheable: false, idempotent: false },
+  updateContentStorage: {
+    costHint: "2-4 REST 请求(先取最新版本再写入,冲突时最多重试一次),需要 --confirm true",
+    nextBestTools: ["getContent", "downloadPage"],
+    recommendations: [
+      { tool: "getContent", reason: "回读刚更新的页面正文", priority: 1, args: { id: { source: "input", path: "id" } } },
+      { tool: "downloadPage", reason: "把刚更新的页面下载到本地核对", priority: 0, args: { id: { source: "input", path: "id" } } },
+    ],
+    cacheable: false,
+    idempotent: false,
+  },
 
   // labels
   addLabels: {

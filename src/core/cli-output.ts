@@ -39,6 +39,7 @@ export function printHelp(role: Role, commandNames: string[]): void {
     "  confluence list                 查看全部可用命令（推荐）",
     "  confluence help <command>       查看命令参数",
     "  confluence whoami               校验当前账号",
+    "  confluence config show          查看当前配置来源",
     "  confluence initConfluence       初始化或校验连接配置",
     "  confluence version              查看版本",
     "  confluence changelog            查看最近更新",
@@ -225,7 +226,7 @@ interface CommandListGroup {
 
 function buildCommandGroups(commandNames: string[]): CommandListGroup[] {
   const groups: CommandListGroup[] = [
-    { title: "开始使用", match: (name) => ["changelog", "help", "list", "version", "install", "update", "upgrade", "uninstall", "remove", "initConfluence", "whoami", "who-am-i", "getCurrentUser"].includes(name), commands: [] },
+    { title: "开始使用", match: (name) => ["changelog", "help", "list", "version", "install", "update", "upgrade", "uninstall", "remove", "initConfluence", "whoami", "who-am-i", "getCurrentUser", "configShow"].includes(name), commands: [] },
     { title: "内容检索 / 页面", match: (name) => /Content|Page|searchContent|getContent/.test(name), commands: [] },
     { title: "上传 / 下载 / 附件", match: (name) => /Upload|Download|Attachment|upload|download/.test(name), commands: [] },
     { title: "空间 / 标签", match: (name) => /Space|Label/.test(name), commands: [] },

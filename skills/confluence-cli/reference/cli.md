@@ -19,6 +19,7 @@ confluence update --skip-config-check true
 
 ```bash
 confluence list
+confluence config show
 confluence-reader list
 confluence-writer list
 ```
@@ -34,3 +35,19 @@ confluence-writer list
 - `CONFLUENCE_USERNAME` + `CONFLUENCE_PASSWORD`
 - `CONFLUENCE_DISABLE_WRITE=true`
 - `CONFLUENCE_SKIP_UPDATE_CHECK=true`
+
+## 配置自检
+
+```bash
+confluence config show
+```
+
+输出字段包括：
+
+- `url`
+- `apiBaseUrl`
+- `authType`
+- `configPath`
+- `source`
+
+敏感字段会自动脱敏。

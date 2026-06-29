@@ -1,5 +1,7 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InMemoryCliRegistry } from "../../src/core/cli-registry.js";
+import { parseCommandInput } from "../../src/core/cli-registry.js";
 
 function mockRestDependencies(requestResult: unknown = { ok: true }) {
   const request = vi.fn(async () => requestResult);
@@ -57,5 +59,33 @@ describe("REST tools", () => {
 
     await registry.get("callRestApi")!.handler({ method: "POST", path: "/content", pathParams: {}, query: {}, body: { title: "T" }, confirm: true });
     expect(request).toHaveBeenCalledWith("POST", "/content", {}, { title: "T" });
+  });
+
+  it("parses record arguments from JSON strings", () => {
+    const input = parseCommandInput(
+      {
+        pathParams: z.record(z.unknown()).default({}),
+        query: z.record(z.unknown()).default({}),
+      },
+      ["--pathParams", "{\"contentId\":\"403189778\"}", "--query", "{\"expand\":\"body.storage,version\"}"],
+    );
+
+    expect(input).toEqual({
+      pathParams: { contentId: "403189778" },
+      query: { expand: "body.storage,version" },
+    });
+  });
+
+  it("parses JSON body for callRestApi", () => {
+    const input = parseCommandInput(
+      {
+        body: z.unknown().optional(),
+      },
+      ["--body", "{\"title\":\"Doc\",\"version\":{\"number\":7}}"],
+    );
+
+    expect(input).toEqual({
+      body: { title: "Doc", version: { number: 7 } },
+    });
   });
 });

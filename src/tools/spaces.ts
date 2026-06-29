@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getApi } from "../core/api-provider.js";
 import type { CliRegistry } from "../core/cli-registry.js";
+import { getConfigFilePath, loadConfluenceConfig, maskConfig } from "../core/config.js";
 import { jsonResult, listResult } from "../utils/result.js";
 
 export function registerSpaceTools(registry: CliRegistry): void {
@@ -55,6 +56,26 @@ export function registerSpaceTools(registry: CliRegistry): void {
     {},
     getCurrentUser,
     "Alias of whoami",
+  );
+
+  registry.tool(
+    "configShow",
+    {},
+    async () => {
+      const config = loadConfluenceConfig();
+      const masked = maskConfig(config);
+      return jsonResult({
+        url: masked.url,
+        apiBaseUrl: masked.apiBaseUrl,
+        authType: masked.authType,
+        username: masked.username,
+        personalToken: masked.personalToken,
+        password: masked.password,
+        source: masked.source,
+        configPath: getConfigFilePath(),
+      });
+    },
+    "Show current Confluence config with masked secrets",
   );
 
   registry.tool(

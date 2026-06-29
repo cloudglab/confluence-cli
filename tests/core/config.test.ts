@@ -95,4 +95,11 @@ describe("config helpers", () => {
     expect(() => loadConfluenceConfig()).toThrow("Confluence 配置文件损坏");
     expect(() => loadConfluenceConfig()).toThrow(path.join(configDir, "config.json"));
   });
+
+  it("exposes config file path helper", async () => {
+    const homeDir = mockHomeDir();
+    const { getConfigFilePath } = await import("../../src/core/config.js");
+
+    expect(getConfigFilePath()).toBe(path.join(homeDir, ".confluence", "config.json"));
+  });
 });

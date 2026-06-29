@@ -6,7 +6,14 @@
 confluence searchContent --cql 'type = page AND title ~ "Runbook"'
 confluence findContent --space DEV --title "Runbook"
 confluence getContent --id 123456
+confluence getContent --id 123456 --expand 'body.storage,version'
+confluence updateContentStorage --id 123456 --file ./page.storage.html --confirm true
 ```
+
+说明：
+
+- 读页面正文时，优先显式传 `--expand 'body.storage,version'`，这样能直接拿到 `storage` 正文和当前版本号。
+- 改写页面正文时，优先用 `updateContentStorage`，CLI 会自动执行“读取最新版本 -> version + 1 -> PUT”，并在版本冲突时自动重试一次。
 
 ## 子页、评论、标签
 

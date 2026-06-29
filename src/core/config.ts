@@ -48,6 +48,10 @@ export function normalizeConfig(raw: Partial<ConfluenceConfig>): ConfluenceConfi
   };
 }
 
+export function getConfigFilePath(): string {
+  return CONFIG_FILE;
+}
+
 export function loadConfluenceConfig(): ConfluenceConfig {
   const envConfig: Partial<ConfluenceConfig> = {
     url: normalizeOptionalValue(process.env.CONFLUENCE_URL),

@@ -14,8 +14,10 @@ vi.mock("node:fs/promises", async () => {
         version: "0.0.1",
         commands: [
           "initConfluence",
+          "configShow",
           "searchContent",
           "getContent",
+          "updateContentStorage",
           "uploadMarkdown",
           "downloadPage",
           "getCurrentUser",
@@ -28,15 +30,17 @@ vi.mock("node:fs/promises", async () => {
         ],
         groups: {
           init: ["initConfluence"],
-          content: ["searchContent", "getContent"],
+          content: ["searchContent", "getContent", "updateContentStorage"],
           transfer: ["uploadMarkdown", "downloadPage"],
-          space: ["getCurrentUser", "whoami", "who-am-i"],
+          space: ["configShow", "getCurrentUser", "whoami", "who-am-i"],
           install: ["install", "update", "uninstall", "remove"]
         },
         commandToGroup: {
           initConfluence: "init",
+          configShow: "space",
           searchContent: "content",
           getContent: "content",
+          updateContentStorage: "content",
           uploadMarkdown: "transfer",
           downloadPage: "transfer",
           getCurrentUser: "space",
@@ -67,6 +71,7 @@ describe("runCli", () => {
     expect(output).toContain("运行要求：Node.js >= 20");
     expect(output).toContain("confluence [--role full|reader|writer] <command> [--key value]");
     expect(output).toContain("confluence whoami");
+    expect(output).toContain("confluence config show");
     expect(output).toContain("写操作保护");
   });
 
@@ -207,6 +212,32 @@ describe("runCli", () => {
     expect(lastWrite).toContain("显示名：Demo User");
     expect(lastWrite).toContain("用户名：me");
     expect(lastWrite).toContain("快捷入口");
+  });
+
+  it("normalizes config show to configShow", async () => {
+    vi.resetModules();
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    vi.doMock("../src/core/config.js", () => ({
+      getConfigFilePath: vi.fn(() => "/tmp/.confluence/config.json"),
+      loadConfluenceConfig: vi.fn(() => ({
+        url: "https://confluence.example.com",
+        apiBaseUrl: "https://confluence.example.com/rest/api",
+        authType: "pat",
+        personalToken: "token123456",
+        source: "~/.confluence/config.json",
+      })),
+      maskConfig: vi.fn((config) => ({ ...config, personalToken: "tok***456" })),
+    }));
+
+    const { runCli: runCliWithMocks } = await import("../src/cli.js");
+    await runCliWithMocks(["config", "show"]);
+
+    const output = String(write.mock.calls.at(-1)?.[0] ?? "").trim();
+    expect(JSON.parse(output)).toMatchObject({
+      authType: "pat",
+      personalToken: "tok***456",
+      configPath: "/tmp/.confluence/config.json",
+    });
   });
 
   it("injects meta.next when --recommend is enabled", async () => {
