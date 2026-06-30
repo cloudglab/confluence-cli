@@ -1,4 +1,5 @@
 import type { JsonContentResult } from "../types/common.js";
+import { addMarkdownForAi } from "./html-markdown.js";
 
 /**
  * 三档 output mode,默认 `compact`。
@@ -129,7 +130,7 @@ export function appendCommandMeta(result: JsonContentResult, meta: Record<string
  */
 export function buildJsonContentResult(value: unknown, mode?: OutputMode): JsonContentResult {
   const effective = mode ?? currentOutputMode;
-  const payload = normalizePayload(value, effective);
+  const payload = normalizePayload(addMarkdownForAi(value), effective);
   return {
     content: [
       {
